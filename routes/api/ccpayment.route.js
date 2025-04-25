@@ -10,13 +10,14 @@ router.post('/webhook', ccpaymentController.handleWebhook);
 // Auth middleware for all other routes
 router.use(requireAuth);
 
-// Original endpoints
-router.post('/get-permanent-deposit-address', ccpaymentController.getPermanentDepositAddress);
-router.post('/get-deposit-record', ccpaymentController.getDepositRecord);
+// Permanent deposit address endpoints
+router.post('/permanent-address', ccpaymentController.getPermanentDepositAddress);
+router.get('/permanent-addresses', ccpaymentController.getUserPermanentAddresses);
+router.post('/unbind-address', ccpaymentController.unbindDepositAddress);
+router.post('/deposit-record', ccpaymentController.getDepositRecord);
+router.get('/permanent-deposits', ccpaymentController.getPermanentDepositHistory);
 
-// Deposit endpoints
-router.post('/deposit', ccpaymentController.createDepositOrder);
-router.get('/deposit/status/:orderId', ccpaymentController.getDepositOrderStatus);
+// Deposit history
 router.get('/deposit/history', ccpaymentController.getDepositHistory);
 
 // Withdrawal endpoints

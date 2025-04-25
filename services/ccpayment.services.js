@@ -11,6 +11,9 @@ const merchantId = process.env.CCP_MERCHANT_ID;
 const apiBaseUrl = process.env.CCP_API_BASE_URL || 'https://ccpayment.com/ccpayment/v2';
 const webhookSecret = process.env.CCP_WEBHOOK_SECRET;
 
+// Default to Ethereum blockchain for all chain parameters
+const DEFAULT_CHAIN = 'ETH';
+
 const getSignedText = (reqData, timestamp) => {
   try {
     const args = JSON.stringify(reqData);
@@ -31,10 +34,32 @@ const getSignedText = (reqData, timestamp) => {
 
 }
 
+/**
+ * Get or create a permanent deposit address for a user
+ * @param {Object} reqData - Request data
+ * @param {string} reqData.referenceId - Unique reference ID for the user
+ * @param {string} [reqData.chain=ETH] - Blockchain network symbol, defaults to Ethereum
+ * @returns {Promise<Object>} - Deposit address details
+ */
 const getOrCreateAppDepositAddress = async (reqData = {}) => {
+  // Set default chain to Ethereum if not provided
+  if (!reqData.chain) {
+    reqData.chain = DEFAULT_CHAIN;
+  }
+
+  // Validate required parameters
+  if (!reqData.referenceId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'referenceId is required');
+  }
+
+  // Ensure referenceId is between 3-64 characters as per API requirements
+  if (reqData.referenceId.length < 3 || reqData.referenceId.length > 64) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'referenceId must be between 3-64 characters');
+  }
+
   const path = "https://ccpayment.com/ccpayment/v2/getOrCreateAppDepositAddress";
   const timestamp = Math.floor(Date.now() / 1000);
-  const sign = getSignedText(reqData, timestamp)
+  const sign = getSignedText(reqData, timestamp);
   const options = {
     method: "POST",
     headers: {
@@ -44,18 +69,35 @@ const getOrCreateAppDepositAddress = async (reqData = {}) => {
       "Timestamp": timestamp.toString(),
     },
   };
+
   try {
-    const res = await axios.post(path, reqData, options).then(res => res.data)
-    return res
+    const response = await axios.post(path, reqData, options);
+    return response.data;
   } catch (error) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Can not get ccpayment data');
+    console.error('CCPayment getOrCreateAppDepositAddress error:', error.response?.data || error.message);
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      error.response?.data?.msg || 'Failed to get or create deposit address'
+    );
   }
 }
 
+/**
+ * Get deposit record details from CCPayment
+ * @param {Object} reqData - Request data
+ * @param {string} [reqData.recordId] - CCPayment unique ID for a transaction
+ * @param {string} [reqData.txid] - Blockchain transaction ID
+ * @returns {Promise<Object>} - Deposit record details
+ */
 const getDepositRecord = async (reqData = {}) => {
+  // Validate parameters - either recordId or txid must be provided
+  if (!reqData.recordId && !reqData.txid) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Either recordId or txid is required');
+  }
+
   const path = "https://ccpayment.com/ccpayment/v2/getAppDepositRecord";
   const timestamp = Math.floor(Date.now() / 1000);
-  const sign = getSignedText(reqData, timestamp)
+  const sign = getSignedText(reqData, timestamp);
   const options = {
     method: "POST",
     headers: {
@@ -65,91 +107,23 @@ const getDepositRecord = async (reqData = {}) => {
       "Timestamp": timestamp.toString(),
     },
   };
+
   try {
-    const res = await axios.post(path, reqData, options).then(res => res.data)
-    return res
+    const response = await axios.post(path, reqData, options);
+    return response.data;
   } catch (error) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Can not get ccpayment data');
+    console.error('CCPayment getDepositRecord error:', error.response?.data || error.message);
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      error.response?.data?.msg || 'Failed to get deposit record'
+    );
   }
 }
 
 
-/**
- * Create a deposit order with CCPayment
- * @param {Object} data - Deposit order data
- * @param {string} data.userId - User ID
- * @param {number} data.amount - Amount to deposit
- * @param {string} data.currency - Currency code
- * @param {string} data.returnUrl - Return URL after payment
- * @returns {Promise<Object>} - Deposit order details
- */
-const createDepositOrder = async (data) => {
-  const { userId, amount, currency, returnUrl } = data;
+// Note: createDepositOrder function has been removed as we're using permanent deposit addresses exclusively
 
-  const reqData = {
-    "merchantId": merchantId,
-    "merchantOrderId": userId + String(Math.floor(Date.now() / 1000)),
-    "amount": amount.toString(),
-    "coinCode": currency,
-    "returnUrl": returnUrl,
-    "notifyUrl": `${process.env.APP_URL || 'http://localhost:8000'}/api/payment/ccpayment/webhook`
-  };
-
-  const path = `${apiBaseUrl}/createOrder`;
-  const timestamp = Math.floor(Date.now() / 1000);
-  const sign = getSignedText(reqData, timestamp);
-
-  const options = {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Appid": appId,
-      "Sign": sign,
-      "Timestamp": timestamp.toString(),
-    },
-  };
-
-  try {
-    const response = await axios.post(path, reqData, options);
-    return response.data;
-  } catch (error) {
-    console.error('CCPayment createDepositOrder error:', error.response?.data || error.message);
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to create deposit order');
-  }
-};
-
-/**
- * Get deposit order status from CCPayment
- * @param {string} orderId - CCPayment order ID
- * @returns {Promise<Object>} - Order status details
- */
-const getDepositOrderStatus = async (orderId) => {
-  const reqData = {
-    "orderId": orderId
-  };
-
-  const path = `${apiBaseUrl}/getOrderInfo`;
-  const timestamp = Math.floor(Date.now() / 1000);
-  const sign = getSignedText(reqData, timestamp);
-
-  const options = {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Appid": appId,
-      "Sign": sign,
-      "Timestamp": timestamp.toString(),
-    },
-  };
-
-  try {
-    const response = await axios.post(path, reqData, options);
-    return response.data;
-  } catch (error) {
-    console.error('CCPayment getDepositOrderStatus error:', error.response?.data || error.message);
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to get deposit order status');
-  }
-};
+// Note: getDepositOrderStatus function has been removed as we're using permanent deposit addresses exclusively
 
 /**
  * Create a withdrawal request with CCPayment
@@ -353,13 +327,103 @@ const verifyWebhookSignature = (payload, signature) => {
   }
 };
 
+/**
+ * Unbind a deposit address that has been flagged as risky
+ * @param {Object} data - Address unbinding data
+ * @param {string} [data.chain=ETH] - Blockchain network symbol, defaults to Ethereum
+ * @param {string} data.address - Address to unbind
+ * @returns {Promise<Object>} - Unbinding result
+ */
+const unbindAddress = async (data) => {
+  // Create a new object to avoid modifying the original data object
+  const unbindData = { ...data };
+
+  // Set default chain to Ethereum if not provided
+  if (!unbindData.chain) {
+    unbindData.chain = DEFAULT_CHAIN;
+  }
+
+  // Validate required parameters
+  if (!unbindData.address) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'address is required');
+  }
+
+  const reqData = {
+    chain: unbindData.chain,
+    address: unbindData.address
+  };
+
+  const path = `${apiBaseUrl}/addressUnbinding`;
+  const timestamp = Math.floor(Date.now() / 1000);
+  const sign = getSignedText(reqData, timestamp);
+
+  const options = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Appid": appId,
+      "Sign": sign,
+      "Timestamp": timestamp.toString(),
+    },
+  };
+
+  try {
+    const response = await axios.post(path, reqData, options);
+    return response.data;
+  } catch (error) {
+    console.error('CCPayment unbindAddress error:', error.response?.data || error.message);
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to unbind address');
+  }
+};
+
+/**
+ * Get deposit records list from CCPayment
+ * @param {Object} [params] - Optional parameters for filtering
+ * @param {number} [params.page=1] - Page number
+ * @param {number} [params.limit=20] - Records per page
+ * @returns {Promise<Object>} - List of deposit records
+ */
+const getDepositRecordsList = async (params = {}) => {
+  const reqData = {
+    page: params.page || 1,
+    limit: params.limit || 20
+  };
+
+  const path = `${apiBaseUrl}/getAppDepositRecordList`;
+  const timestamp = Math.floor(Date.now() / 1000);
+  const sign = getSignedText(reqData, timestamp);
+
+  const options = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Appid": appId,
+      "Sign": sign,
+      "Timestamp": timestamp.toString(),
+    },
+  };
+
+  try {
+    const response = await axios.post(path, reqData, options);
+    return response.data;
+  } catch (error) {
+    console.error('CCPayment getDepositRecordsList error:', error.response?.data || error.message);
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to get deposit records list');
+  }
+};
+
 module.exports = {
+  // Permanent deposit address methods
   getOrCreateAppDepositAddress,
   getDepositRecord,
-  createDepositOrder,
-  getDepositOrderStatus,
+  getDepositRecordsList,
+  unbindAddress,
+
+  // Withdrawal methods
   createWithdrawalRequest,
   getWithdrawalStatus,
+
+  // Utility methods
   getSupportedCurrencies,
   getExchangeRates,
   convertAmount,
