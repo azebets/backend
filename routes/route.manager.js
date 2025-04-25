@@ -12,6 +12,7 @@ const routeManager = (app) => {
     app.use('/api/games', gameRoute);
     app.use('/api/user/crash-game', crash);
     app.use("/api/profile", profileRoute);
+    app.use("/api/payment/ccpayment", ccpaymentRoute);
     app.use("/api/ccpayment", ccpaymentRoute);
     app.use("/api/hilo-game", hiloGame)
 }
