@@ -5,9 +5,9 @@ const httpStatus = require('http-status');
 require("dotenv").config();
 
 // CCPayment API Configuration
-const appId = process.env.CCP_APP_ID;
-const appSecret = process.env.CCP_APP_SECRET;
-const merchantId = process.env.CCP_MERCHANT_ID;
+const appId = "XckV1hj7uBFU4wfP" || process.env.CCP_APP_ID;
+const appSecret = "ec5ae75f83a63fd20b294b460c716910" || process.env.CCP_APP_SECRET;
+const merchantId = "27630" || "process.env.CCP_MERCHANT_ID;"
 const apiBaseUrl = process.env.CCP_API_BASE_URL || 'https://ccpayment.com/ccpayment/v2';
 const webhookSecret = process.env.CCP_WEBHOOK_SECRET;
 
