@@ -11,11 +11,17 @@ const { handleHiloBet,
 async function createsocket(httpServer) {
   const io = new Server(httpServer, {
     cors: {
-      origin: ["https://azebets.com","http://localhost:5173","http://localhost:5174" ]
+      origin: ["https://azebets.com", "http://localhost:5173", "http://localhost:5174"],
+      methods: ["GET", "POST"],
+      credentials: true
     },
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    transports: ['websocket', 'polling']
   });
 
-  // Crash Gamem
+  
+  // Crash Game
   new CrashGameEngine(io)
     .run((latestBet) => {
       io.emit("latest-bet", latestBet);
@@ -24,7 +30,7 @@ async function createsocket(httpServer) {
       console.log("Crash Game failed to start ::> ", err);
     });
 
-    new PubicChats(io)
+  new PubicChats(io)
     .getChatsfromDB((newMessage) => {
       io.emit("new-message", newMessage);
     })
