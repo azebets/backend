@@ -2,11 +2,16 @@ const { Server } = require("socket.io");
 const DiceGame = require("../model/dice_game");  
 const PubicChats = require("../controllers/Chat");
 const { CrashGameEngine } = require("../controllers/crashControllers");
+const { handleHiloBet,
+  handleHiloNextRound,
+  handleHiloCashout,
+  initHiloGame,
+} = require("../controllers/hiloController");
 
 async function createsocket(httpServer) {
   const io = new Server(httpServer, {
     cors: {
-      origin: ["https://stroopwafe.netlify.app","http://localhost:5173","http://localhost:5174" ]
+      origin: ["https://azebets.com","http://localhost:5173","http://localhost:5174" ]
     },
   });
 
@@ -45,6 +50,29 @@ async function createsocket(httpServer) {
     socket.on("dice-game", (data) => {
       DiceActivePlayers(data);
     });
+
+      //HILO GAME
+      socket.on("hilo-init", (data) => {
+        initHiloGame(data, (event, payload) => {
+          io.emit(event, payload);
+        });
+      });
+      socket.on("hilo-bet", (data) => {
+        handleHiloBet(data, (event, payload) => {
+          io.emit(event, payload);
+        });
+      });
+      socket.on("hilo-cashout", (data) => {
+        handleHiloCashout(data, (event, payload) => {
+          io.emit(event, payload);
+        });
+      });
+      socket.on("hilo-next-round", (data) => {
+        handleHiloNextRound(data, (event, payload) => {
+          io.emit(event, payload);
+        });
+      });
+
   });
 }
 
