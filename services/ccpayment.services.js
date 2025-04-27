@@ -5,9 +5,9 @@ const httpStatus = require('http-status');
 require("dotenv").config();
 
 // CCPayment API Configuration
-const appId = process.env.CCP_APP_ID || "GgbTZwg6O83FvAsj";
-const appSecret = process.env.CCP_APP_SECRET || "4bff0fbc31f1cc8df6a4742ccf8043f2";
-const merchantId = process.env.CCP_MERCHANT_ID || "26990";
+const appId = process.env.CCP_APP_ID || "XckV1hj7uBFU4wfP";
+const appSecret = process.env.CCP_APP_SECRET || "ec5ae75f83a63fd20b294b460c716910";
+const merchantId = process.env.CCP_MERCHANT_ID || "27630";
 const apiBaseUrl = process.env.CCP_API_BASE_URL || 'https://ccpayment.com/ccpayment/v2';
 
 // Default to Ethereum blockchain for all chain parameters

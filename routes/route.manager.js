@@ -4,9 +4,9 @@ const profileRoute = require('./api/profile.route');
 const ccpaymentRoute = require('./api/ccpayment.route');
 const hiloGame = require("./api/hilo.routes")
 const CrashGame = require("./api/crashgame.route");
+const plinkoGame = require("./api/games/plinko.route")
 
 const routeManager = (app) => {
-
     // API Routes
     app.use("/auth", authRoute);
     app.use('/api/games', gameRoute);
@@ -15,6 +15,7 @@ const routeManager = (app) => {
     app.use("/api/ccpayment", ccpaymentRoute);
     app.use("/api/hilo-game", hiloGame)
     app.use("/api/user/crash-game", CrashGame);
+    app.use("/api/user/plinko-game", plinkoGame);
 }
 
 module.exports = routeManager

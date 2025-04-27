@@ -57,27 +57,27 @@ async function createsocket(httpServer) {
       DiceActivePlayers(data);
     });
 
-      //HILO GAME
-      socket.on("hilo-init", (data) => {
-        initHiloGame(data, (event, payload) => {
-          io.emit(event, payload);
-        });
+     //HILO GAME
+    socket.on("hilo-init", (data) => {
+      initHiloGame(data, (event, payload) => {
+        io.emit(event, payload);
       });
-      socket.on("hilo-bet", (data) => {
-        handleHiloBet(data, (event, payload) => {
-          io.emit(event, payload);
-        });
+    });
+    socket.on("hilo-bet", (data) => {
+      handleHiloBet(data, (event, payload) => {
+        io.emit(event, payload);
       });
-      socket.on("hilo-cashout", (data) => {
-        handleHiloCashout(data, (event, payload) => {
-          io.emit(event, payload);
-        });
+    });
+    socket.on("hilo-cashout", (data) => {
+      handleHiloCashout(data, (event, payload) => {
+        io.emit(event, payload);
       });
-      socket.on("hilo-next-round", (data) => {
-        handleHiloNextRound(data, (event, payload) => {
-          io.emit(event, payload);
-        });
+    });
+    socket.on("hilo-next-round", (data) => {
+      handleHiloNextRound(data, (event, payload) => {
+        io.emit(event, payload);
       });
+    });
 
   });
 }
