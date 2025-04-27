@@ -5,11 +5,10 @@ const httpStatus = require('http-status');
 require("dotenv").config();
 
 // CCPayment API Configuration
-const appId = "XckV1hj7uBFU4wfP" || process.env.CCP_APP_ID;
-const appSecret = "ec5ae75f83a63fd20b294b460c716910" || process.env.CCP_APP_SECRET;
-const merchantId = "27630" || "process.env.CCP_MERCHANT_ID;"
+const appId = process.env.CCP_APP_ID || "GgbTZwg6O83FvAsj";
+const appSecret = process.env.CCP_APP_SECRET || "4bff0fbc31f1cc8df6a4742ccf8043f2";
+const merchantId = process.env.CCP_MERCHANT_ID || "26990";
 const apiBaseUrl = process.env.CCP_API_BASE_URL || 'https://ccpayment.com/ccpayment/v2';
-const webhookSecret = process.env.CCP_WEBHOOK_SECRET;
 
 // Default to Ethereum blockchain for all chain parameters
 const DEFAULT_CHAIN = 'ETH';
@@ -72,7 +71,10 @@ const getOrCreateAppDepositAddress = async (reqData = {}) => {
 
   try {
     const response = await axios.post(path, reqData, options);
-    return response.data;
+    return {
+      ...response.data,
+      success: response.data.code === 10000
+    };
   } catch (error) {
     console.error('CCPayment getOrCreateAppDepositAddress error:', error.response?.data || error.message);
     throw new ApiError(
@@ -85,17 +87,16 @@ const getOrCreateAppDepositAddress = async (reqData = {}) => {
 /**
  * Get deposit record details from CCPayment
  * @param {Object} reqData - Request data
- * @param {string} [reqData.recordId] - CCPayment unique ID for a transaction
- * @param {string} [reqData.txid] - Blockchain transaction ID
+ * @param {string} reqData.recordId - CCPayment unique ID for a transaction
  * @returns {Promise<Object>} - Deposit record details
  */
 const getDepositRecord = async (reqData = {}) => {
-  // Validate parameters - either recordId or txid must be provided
-  if (!reqData.recordId && !reqData.txid) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Either recordId or txid is required');
+  // Validate parameters - recordId is required
+  if (!reqData.recordId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'recordId is required');
   }
 
-  const path = "https://ccpayment.com/ccpayment/v2/getAppDepositRecord";
+  const path = `${apiBaseUrl}/getAppDepositRecord`;
   const timestamp = Math.floor(Date.now() / 1000);
   const sign = getSignedText(reqData, timestamp);
   const options = {
@@ -110,7 +111,10 @@ const getDepositRecord = async (reqData = {}) => {
 
   try {
     const response = await axios.post(path, reqData, options);
-    return response.data;
+    return {
+      ...response.data,
+      success: response.data.code === 10000
+    };
   } catch (error) {
     console.error('CCPayment getDepositRecord error:', error.response?.data || error.message);
     throw new ApiError(
@@ -126,29 +130,41 @@ const getDepositRecord = async (reqData = {}) => {
 // Note: getDepositOrderStatus function has been removed as we're using permanent deposit addresses exclusively
 
 /**
- * Create a withdrawal request with CCPayment
+ * Create a network withdrawal order with CCPayment
  * @param {Object} data - Withdrawal request data
- * @param {string} data.userId - User ID
+ * @param {string} data.userId - User ID (for internal reference)
  * @param {number} data.amount - Amount to withdraw
- * @param {string} data.currency - Currency code
+ * @param {number} data.coinId - Coin ID
+ * @param {string} data.chain - Symbol of the chain
  * @param {string} data.address - Destination wallet address
- * @param {number} data.networkFee - Network fee amount
+ * @param {string} [data.memo] - Memo of the withdrawal address (optional)
+ * @param {boolean} [data.merchantPayNetworkFee=false] - Whether merchant pays network fee (optional)
  * @returns {Promise<Object>} - Withdrawal request details
  */
 const createWithdrawalRequest = async (data) => {
-  const { userId, amount, currency, address, networkFee } = data;
+  const { userId, amount, coinId, chain, address, memo, merchantPayNetworkFee } = data;
+
+  // Generate a unique order ID using userId and timestamp
+  const orderId = userId + String(Math.floor(Date.now() / 1000));
 
   const reqData = {
-    "merchantId": merchantId,
-    "merchantOrderId": userId + String(Math.floor(Date.now() / 1000)),
-    "amount": amount.toString(),
-    "coinCode": currency,
+    "coinId": coinId,
+    "chain": chain || DEFAULT_CHAIN,
     "address": address,
-    "networkFee": networkFee.toString(),
-    "notifyUrl": `${process.env.APP_URL || 'http://localhost:8000'}/api/payment/ccpayment/webhook`
+    "orderId": orderId,
+    "amount": amount.toString()
   };
 
-  const path = `${apiBaseUrl}/withdraw`;
+  // Add optional parameters if provided
+  if (memo) {
+    reqData.memo = memo;
+  }
+
+  if (merchantPayNetworkFee !== undefined) {
+    reqData.merchantPayNetworkFee = merchantPayNetworkFee;
+  }
+
+  const path = "https://ccpayment.com/ccpayment/v2/applyAppWithdrawToNetwork";
   const timestamp = Math.floor(Date.now() / 1000);
   const sign = getSignedText(reqData, timestamp);
 
@@ -164,24 +180,36 @@ const createWithdrawalRequest = async (data) => {
 
   try {
     const response = await axios.post(path, reqData, options);
-    return response.data;
+    return {
+      ...response.data,
+      success: response.data.code === 10000,
+      orderId: orderId // Include the orderId in the response for reference
+    };
   } catch (error) {
     console.error('CCPayment createWithdrawalRequest error:', error.response?.data || error.message);
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to create withdrawal request');
+    throw new ApiError(httpStatus.BAD_REQUEST, error.response?.data?.msg || 'Failed to create withdrawal request');
   }
 };
 
 /**
- * Get withdrawal status from CCPayment
- * @param {string} withdrawalId - CCPayment withdrawal ID
- * @returns {Promise<Object>} - Withdrawal status details
+ * Get withdrawal record from CCPayment
+ * @param {Object} reqData - Request data
+ * @param {string} [reqData.recordId] - CCPayment unique ID for a transaction
+ * @param {string} [reqData.orderId] - Your unique order ID for the withdrawal
+ * @returns {Promise<Object>} - Withdrawal record details
  */
-const getWithdrawalStatus = async (withdrawalId) => {
-  const reqData = {
-    "withdrawId": withdrawalId
-  };
+const getWithdrawalRecord = async (reqData = {}) => {
+  // Validate parameters - either recordId or orderId must be provided
+  if (!reqData.recordId && !reqData.orderId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Either recordId or orderId is required');
+  }
 
-  const path = `${apiBaseUrl}/getWithdrawInfo`;
+  // If a string is passed, assume it's an orderId for backward compatibility
+  if (typeof reqData === 'string') {
+    reqData = { orderId: reqData };
+  }
+
+  const path = `${apiBaseUrl}/getAppWithdrawRecord`;
   const timestamp = Math.floor(Date.now() / 1000);
   const sign = getSignedText(reqData, timestamp);
 
@@ -197,21 +225,24 @@ const getWithdrawalStatus = async (withdrawalId) => {
 
   try {
     const response = await axios.post(path, reqData, options);
-    return response.data;
+    return {
+      ...response.data,
+      success: response.data.code === 10000
+    };
   } catch (error) {
-    console.error('CCPayment getWithdrawalStatus error:', error.response?.data || error.message);
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to get withdrawal status');
+    console.error('CCPayment getWithdrawalRecord error:', error.response?.data || error.message);
+    throw new ApiError(httpStatus.BAD_REQUEST, error.response?.data?.msg || 'Failed to get withdrawal record');
   }
 };
 
 /**
- * Get supported currencies from CCPayment
- * @returns {Promise<Object>} - List of supported currencies
+ * Get list of supported coins and their networks from CCPayment
+ * @returns {Promise<Object>} - List of supported coins with network details
  */
-const getSupportedCurrencies = async () => {
+const getCoinList = async () => {
   const reqData = {};
 
-  const path = `${apiBaseUrl}/getSupportedCurrencies`;
+  const path = `${apiBaseUrl}/getCoinList`;
   const timestamp = Math.floor(Date.now() / 1000);
   const sign = getSignedText(reqData, timestamp);
 
@@ -227,24 +258,32 @@ const getSupportedCurrencies = async () => {
 
   try {
     const response = await axios.post(path, reqData, options);
-    return response.data;
+    return {
+      ...response.data,
+      success: response.data.code === 10000
+    };
   } catch (error) {
-    console.error('CCPayment getSupportedCurrencies error:', error.response?.data || error.message);
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to get supported currencies');
+    console.error('CCPayment getCoinList error:', error.response?.data || error.message);
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to get coin list');
   }
 };
 
 /**
- * Get exchange rates from CCPayment
- * @param {string} currency - Base currency code
- * @returns {Promise<Object>} - Exchange rates
+ * Get cryptocurrency prices in USDT from CCPayment
+ * @param {Array<number>} coinIds - Array of coin IDs to get prices for
+ * @returns {Promise<Object>} - Coin prices in USDT
  */
-const getExchangeRates = async (currency) => {
+const getCoinUSDTPrice = async (coinIds) => {
+  // Ensure coinIds is an array
+  if (!Array.isArray(coinIds)) {
+    coinIds = [coinIds];
+  }
+
   const reqData = {
-    "coinCode": currency
+    "coinIds": coinIds
   };
 
-  const path = `${apiBaseUrl}/getExchangeRates`;
+  const path = `${apiBaseUrl}/getCoinUSDTPrice`;
   const timestamp = Math.floor(Date.now() / 1000);
   const sign = getSignedText(reqData, timestamp);
 
@@ -260,10 +299,13 @@ const getExchangeRates = async (currency) => {
 
   try {
     const response = await axios.post(path, reqData, options);
-    return response.data;
+    return {
+      ...response.data,
+      success: response.data.code === 10000
+    };
   } catch (error) {
-    console.error('CCPayment getExchangeRates error:', error.response?.data || error.message);
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to get exchange rates');
+    console.error('CCPayment getCoinUSDTPrice error:', error.response?.data || error.message);
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to get coin prices');
   }
 };
 
@@ -300,7 +342,10 @@ const convertAmount = async (data) => {
 
   try {
     const response = await axios.post(path, reqData, options);
-    return response.data;
+    return {
+      ...response.data,
+      success: response.data.code === 10000
+    };
   } catch (error) {
     console.error('CCPayment convertAmount error:', error.response?.data || error.message);
     throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to convert amount');
@@ -310,16 +355,37 @@ const convertAmount = async (data) => {
 /**
  * Verify webhook signature from CCPayment
  * @param {Object} payload - Webhook payload
- * @param {string} signature - Webhook signature
+ * @param {string} signature - Webhook signature from the Sign header
+ * @param {string} timestamp - Timestamp from the Timestamp header
+ * @param {string} appIdHeader - App ID from the Appid header
  * @returns {boolean} - Whether the signature is valid
  */
-const verifyWebhookSignature = (payload, signature) => {
+const verifyWebhookSignature = (payload, signature, timestamp, appIdHeader) => {
   try {
+    // Verify that the appId in the header matches our appId
+    if (appIdHeader !== appId) {
+      console.error('CCPayment verifyWebhookSignature error: App ID mismatch');
+      return false;
+    }
+
+    // Verify that the timestamp is within 2 minutes (120 seconds)
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    const timestampDiff = Math.abs(currentTimestamp - parseInt(timestamp));
+    if (timestampDiff > 120) {
+      console.error('CCPayment verifyWebhookSignature error: Timestamp expired');
+      return false;
+    }
+
+    // Create the signature text: {appId} + {timestamp} + PayloadJSON
+    const signText = `${appId}${timestamp}${JSON.stringify(payload)}`;
+
+    // Calculate the signature using HMAC-SHA256
     const calculatedSignature = crypto
-      .createHmac('sha256', webhookSecret)
-      .update(JSON.stringify(payload))
+      .createHmac('sha256', appSecret)
+      .update(signText)
       .digest('hex');
 
+    // Compare the calculated signature with the one from the header
     return calculatedSignature === signature;
   } catch (error) {
     console.error('CCPayment verifyWebhookSignature error:', error);
@@ -369,7 +435,10 @@ const unbindAddress = async (data) => {
 
   try {
     const response = await axios.post(path, reqData, options);
-    return response.data;
+    return {
+      ...response.data,
+      success: response.data.code === 10000
+    };
   } catch (error) {
     console.error('CCPayment unbindAddress error:', error.response?.data || error.message);
     throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to unbind address');
@@ -379,15 +448,27 @@ const unbindAddress = async (data) => {
 /**
  * Get deposit records list from CCPayment
  * @param {Object} [params] - Optional parameters for filtering
- * @param {number} [params.page=1] - Page number
- * @param {number} [params.limit=20] - Records per page
+ * @param {number} [params.coinId] - Coin ID
+ * @param {string} [params.referenceId] - Unique reference ID for the user
+ * @param {string} [params.orderId] - Order ID
+ * @param {string} [params.chain] - Symbol of the chain
+ * @param {number} [params.startAt] - Retrieve records starting from this timestamp
+ * @param {number} [params.endAt] - Retrieve records up to this timestamp
+ * @param {string} [params.nextId] - Next ID for pagination
  * @returns {Promise<Object>} - List of deposit records
  */
 const getDepositRecordsList = async (params = {}) => {
-  const reqData = {
-    page: params.page || 1,
-    limit: params.limit || 20
-  };
+  // Create request data with only the provided parameters
+  const reqData = {};
+
+  // Add optional parameters if provided
+  if (params.coinId) reqData.coinId = params.coinId;
+  if (params.referenceId) reqData.referenceId = params.referenceId;
+  if (params.orderId) reqData.orderId = params.orderId;
+  if (params.chain) reqData.chain = params.chain;
+  if (params.startAt) reqData.startAt = params.startAt;
+  if (params.endAt) reqData.endAt = params.endAt;
+  if (params.nextId) reqData.nextId = params.nextId;
 
   const path = `${apiBaseUrl}/getAppDepositRecordList`;
   const timestamp = Math.floor(Date.now() / 1000);
@@ -405,10 +486,62 @@ const getDepositRecordsList = async (params = {}) => {
 
   try {
     const response = await axios.post(path, reqData, options);
-    return response.data;
+    return {
+      ...response.data,
+      success: response.data.code === 10000
+    };
   } catch (error) {
     console.error('CCPayment getDepositRecordsList error:', error.response?.data || error.message);
     throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to get deposit records list');
+  }
+};
+
+/**
+ * Get withdrawal records list from CCPayment
+ * @param {Object} [params] - Optional parameters for filtering
+ * @param {number} [params.coinId] - Coin ID
+ * @param {Array<string>} [params.orderIds] - Array of order IDs (max 20)
+ * @param {string} [params.chain] - Symbol of the chain
+ * @param {number} [params.startAt] - Retrieve records starting from this timestamp
+ * @param {number} [params.endAt] - Retrieve records up to this timestamp
+ * @param {string} [params.nextId] - Next ID for pagination
+ * @returns {Promise<Object>} - List of withdrawal records
+ */
+const getWithdrawalRecordsList = async (params = {}) => {
+  // Create request data with only the provided parameters
+  const reqData = {};
+
+  // Add optional parameters if provided
+  if (params.coinId) reqData.coinId = params.coinId;
+  if (params.orderIds && Array.isArray(params.orderIds)) reqData.orderIds = params.orderIds;
+  if (params.chain) reqData.chain = params.chain;
+  if (params.startAt) reqData.startAt = params.startAt;
+  if (params.endAt) reqData.endAt = params.endAt;
+  if (params.nextId) reqData.nextId = params.nextId;
+
+  const path = `${apiBaseUrl}/getAppWithdrawRecordList`;
+  const timestamp = Math.floor(Date.now() / 1000);
+  const sign = getSignedText(reqData, timestamp);
+
+  const options = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Appid": appId,
+      "Sign": sign,
+      "Timestamp": timestamp.toString(),
+    },
+  };
+
+  try {
+    const response = await axios.post(path, reqData, options);
+    return {
+      ...response.data,
+      success: response.data.code === 10000
+    };
+  } catch (error) {
+    console.error('CCPayment getWithdrawalRecordsList error:', error.response?.data || error.message);
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to get withdrawal records list');
   }
 };
 
@@ -421,11 +554,12 @@ module.exports = {
 
   // Withdrawal methods
   createWithdrawalRequest,
-  getWithdrawalStatus,
+  getWithdrawalRecord,
+  getWithdrawalRecordsList,
 
   // Utility methods
-  getSupportedCurrencies,
-  getExchangeRates,
+  getCoinList,
+  getCoinUSDTPrice,
   convertAmount,
   verifyWebhookSignature
 }

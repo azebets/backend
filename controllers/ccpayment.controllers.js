@@ -46,7 +46,6 @@ const getPermanentDepositAddress = catchAsync(async (req, res) => {
         };
 
         const ccpResponse = await ccpaymentService.getOrCreateAppDepositAddress(reqData);
-
         if (!ccpResponse.success) {
             return res.status(httpStatus.BAD_REQUEST).json({
                 success: false,
@@ -91,6 +90,7 @@ const getPermanentDepositAddress = catchAsync(async (req, res) => {
         });
     }
 });
+
 
 const getDepositRecord = catchAsync(async (req, res) => {
     const { body: reqBody } = req;
@@ -169,28 +169,44 @@ const getDepositHistory = catchAsync(async (req, res) => {
 
 // Withdrawal Endpoints
 const createWithdrawalRequest = catchAsync(async (req, res) => {
-    const { amount, amountUSD, currency, address, networkFee } = req.body;
+    const { amount, amountUSD, coinId, chain, address, memo, merchantPayNetworkFee } = req.body;
     const user_id = req.id;
 
-    if (!amount || !currency || !address || networkFee === undefined) {
+    if (!amount || !coinId || !address) {
         return res.status(httpStatus.BAD_REQUEST).json({
             success: false,
-            message: "Missing required parameters"
+            message: "Missing required parameters: amount, coinId, and address are required"
         });
     }
 
     try {
-        // Check if user has sufficient balance
-        // For simplicity, we're assuming the currency is USD here
-        // You may need to adjust this based on your wallet structure
-        const walletCurrency = currency === 'USDT' ? 'USD' : currency;
+        // Get coin details to determine wallet currency
+        const coinListResponse = await ccpaymentService.getCoinList();
+        if (!coinListResponse.success) {
+            return res.status(httpStatus.BAD_REQUEST).json({
+                success: false,
+                message: "Failed to get coin information"
+            });
+        }
+
+        // Find the coin in the list
+        const coin = coinListResponse.data.find(c => c.coinId === coinId);
+        if (!coin) {
+            return res.status(httpStatus.BAD_REQUEST).json({
+                success: false,
+                message: "Invalid coinId"
+            });
+        }
+
+        // Determine wallet currency
+        const walletCurrency = coin.coinSymbol === 'USDT' ? 'USD' : coin.coinSymbol;
 
         // Subtract funds from wallet
         try {
             await walletUpdateService.updateWalletBalance({
                 userId: user_id,
                 currency: walletCurrency,
-                amount,
+                amount: parseFloat(amount),
                 operation: 'subtract',
                 transactionType: 'Withdrawal'
             });
@@ -208,9 +224,11 @@ const createWithdrawalRequest = catchAsync(async (req, res) => {
         const ccpResponse = await ccpaymentService.createWithdrawalRequest({
             userId: user_id,
             amount,
-            currency,
+            coinId,
+            chain: chain || 'ETH', // Default to ETH if not provided
             address,
-            networkFee
+            memo,
+            merchantPayNetworkFee
         });
 
         if (!ccpResponse.success) {
@@ -218,33 +236,41 @@ const createWithdrawalRequest = catchAsync(async (req, res) => {
             await walletUpdateService.updateWalletBalance({
                 userId: user_id,
                 currency: walletCurrency,
-                amount,
+                amount: parseFloat(amount),
                 operation: 'add',
                 transactionType: 'Withdrawal Refund'
             });
 
             return res.status(httpStatus.BAD_REQUEST).json({
                 success: false,
-                message: ccpResponse.message || "Failed to create withdrawal request"
+                message: ccpResponse.msg || "Failed to create withdrawal request"
             });
         }
 
         // Save withdrawal request to database
         const withdrawalRequest = await CCPaymentWithdrawal.create({
             user_id,
-            withdrawalId: ccpResponse.data.withdrawalId,
-            amount,
-            amountUSD: amountUSD || amount, // Fallback if USD amount not provided
-            currency,
+            withdrawalId: ccpResponse.orderId, // Use orderId as withdrawalId
+            recordId: ccpResponse.data.recordId, // Store CCPayment's recordId
+            amount: parseFloat(amount),
+            amountUSD: amountUSD || parseFloat(amount), // Fallback if USD amount not provided
+            currency: coin.coinSymbol,
             address,
-            networkFee,
+            networkFee: 0, // Network fee is handled by CCPayment now
             status: 'pending',
-            metadata: ccpResponse.data
+            metadata: {
+                ...ccpResponse.data,
+                coinId,
+                chain: chain || 'ETH',
+                memo: memo || '',
+                merchantPayNetworkFee: merchantPayNetworkFee || false
+            }
         });
 
         return res.status(httpStatus.CREATED).json({
             success: true,
             withdrawalId: withdrawalRequest.withdrawalId,
+            recordId: withdrawalRequest.recordId,
             status: withdrawalRequest.status
         });
     } catch (error) {
@@ -281,36 +307,67 @@ const getWithdrawalStatus = catchAsync(async (req, res) => {
         if (withdrawalRequest.status !== 'pending' && withdrawalRequest.status !== 'processing') {
             return res.status(httpStatus.OK).json({
                 success: true,
-                status: withdrawalRequest.status
+                status: withdrawalRequest.status,
+                data: withdrawalRequest
             });
         }
 
         // Check status with CCPayment
-        const ccpResponse = await ccpaymentService.getWithdrawalStatus(withdrawalId);
+        const ccpResponse = await ccpaymentService.getWithdrawalRecord(withdrawalId);
 
         if (!ccpResponse.success) {
             return res.status(httpStatus.BAD_REQUEST).json({
                 success: false,
-                message: ccpResponse.message || "Failed to get withdrawal status"
+                message: ccpResponse.msg || "Failed to get withdrawal record"
             });
         }
 
-        // Update status in database if changed
-        if (ccpResponse.data.status !== withdrawalRequest.status) {
-            withdrawalRequest.status = ccpResponse.data.status === 'completed' ? 'completed' :
-                                      ccpResponse.data.status === 'processing' ? 'processing' :
-                                      ccpResponse.data.status === 'failed' ? 'failed' : 'pending';
+        // Map CCPayment status to our status format
+        let newStatus;
+        if (ccpResponse.data.status === 'Success') {
+            newStatus = 'completed';
+        } else if (ccpResponse.data.status === 'Processing') {
+            newStatus = 'processing';
+        } else if (ccpResponse.data.status === 'Failed') {
+            newStatus = 'failed';
+        } else if (ccpResponse.data.status === 'WaitingApproval') {
+            newStatus = 'pending';
+        } else if (ccpResponse.data.status === 'Rejected') {
+            newStatus = 'failed';
+        } else {
+            newStatus = 'pending';
+        }
 
-            if (withdrawalRequest.status === 'completed') {
+        // Update status in database if changed
+        if (newStatus !== withdrawalRequest.status) {
+            withdrawalRequest.status = newStatus;
+
+            if (newStatus === 'completed') {
                 withdrawalRequest.completedAt = new Date();
+            } else if (newStatus === 'failed' && withdrawalRequest.status !== 'failed') {
+                // Refund the amount if withdrawal fails
+                const walletCurrency = withdrawalRequest.currency === 'USDT' ? 'USD' : withdrawalRequest.currency;
+                await walletUpdateService.updateWalletBalance({
+                    userId: withdrawalRequest.user_id,
+                    currency: walletCurrency,
+                    amount: withdrawalRequest.amount,
+                    operation: 'add',
+                    transactionType: 'Withdrawal Refund'
+                });
             }
 
+            // Update metadata with latest response
+            withdrawalRequest.metadata = { ...withdrawalRequest.metadata, apiResponse: ccpResponse.data };
             await withdrawalRequest.save();
         }
 
         return res.status(httpStatus.OK).json({
             success: true,
-            status: withdrawalRequest.status
+            status: withdrawalRequest.status,
+            data: {
+                ...withdrawalRequest.toObject(),
+                ccpStatus: ccpResponse.data.status
+            }
         });
     } catch (error) {
         console.error('Get withdrawal status error:', error);
@@ -361,15 +418,57 @@ const getWithdrawalHistory = catchAsync(async (req, res) => {
     }
 });
 
+// Get withdrawal records list from CCPayment API
+const getWithdrawalRecordsList = catchAsync(async (req, res) => {
+    const { coinId, orderIds, chain, startAt, endAt, nextId } = req.query;
+
+    try {
+        // Build params object
+        const params = {};
+
+        // Add parameters if provided
+        if (coinId) params.coinId = parseInt(coinId);
+        if (orderIds) {
+            // Parse orderIds from comma-separated string
+            if (typeof orderIds === 'string') {
+                params.orderIds = orderIds.split(',').map(id => id.trim());
+            }
+        }
+        if (chain) params.chain = chain;
+        if (startAt) params.startAt = parseInt(startAt);
+        if (endAt) params.endAt = parseInt(endAt);
+        if (nextId) params.nextId = nextId;
+
+        const ccpResponse = await ccpaymentService.getWithdrawalRecordsList(params);
+
+        if (!ccpResponse.success) {
+            return res.status(httpStatus.BAD_REQUEST).json({
+                success: false,
+                message: ccpResponse.message || "Failed to get withdrawal records list"
+            });
+        }
+
+        return res.status(httpStatus.OK).json({
+            success: true,
+            data: ccpResponse.data
+        });
+    } catch (error) {
+        console.error('Get withdrawal records list error:', error);
+        return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+            success: false,
+            message: "Internal Server Error"
+        });
+    }
+});
+
 // Utility Endpoints
-const getSupportedCurrencies = catchAsync(async (req, res) => {
+const getCoinList = catchAsync(async (req, res) => {
     try {
-        const ccpResponse = await ccpaymentService.getSupportedCurrencies();
-
+        const ccpResponse = await ccpaymentService.getCoinList();
         if (!ccpResponse.success) {
             return res.status(httpStatus.BAD_REQUEST).json({
                 success: false,
-                message: ccpResponse.message || "Failed to get supported currencies"
+                message: ccpResponse.message || "Failed to get coin list"
             });
         }
 
@@ -378,7 +477,7 @@ const getSupportedCurrencies = catchAsync(async (req, res) => {
             data: ccpResponse.data
         });
     } catch (error) {
-        console.error('Get supported currencies error:', error);
+        console.error('Get coin list error:', error);
         return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
             success: false,
             message: "Internal Server Error"
@@ -386,23 +485,28 @@ const getSupportedCurrencies = catchAsync(async (req, res) => {
     }
 });
 
-const getExchangeRates = catchAsync(async (req, res) => {
-    const { currency } = req.query;
+const getCoinPrices = catchAsync(async (req, res) => {
+    const { coinIds } = req.query;
 
-    if (!currency) {
-        return res.status(httpStatus.BAD_REQUEST).json({
-            success: false,
-            message: "Currency is required"
-        });
+    // Parse coinIds from query string
+    let coinIdArray;
+    if (coinIds) {
+        // If coinIds is provided as comma-separated string, parse it
+        if (typeof coinIds === 'string') {
+            coinIdArray = coinIds.split(',').map(id => parseInt(id.trim()));
+        } else {
+            coinIdArray = [parseInt(coinIds)];
+        }
+    } else {
+        // Default to ETH (1) and USDT (1280) if no coinIds provided
+        coinIdArray = [1, 1280];
     }
-
     try {
-        const ccpResponse = await ccpaymentService.getExchangeRates(currency);
-
+        const ccpResponse = await ccpaymentService.getCoinUSDTPrice(coinIdArray);
         if (!ccpResponse.success) {
             return res.status(httpStatus.BAD_REQUEST).json({
                 success: false,
-                message: ccpResponse.message || "Failed to get exchange rates"
+                message: ccpResponse.message || "Failed to get coin prices"
             });
         }
 
@@ -411,13 +515,14 @@ const getExchangeRates = catchAsync(async (req, res) => {
             data: ccpResponse.data
         });
     } catch (error) {
-        console.error('Get exchange rates error:', error);
+        console.error('Get coin prices error:', error);
         return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
             success: false,
             message: "Internal Server Error"
         });
     }
 });
+
 
 const convertAmount = catchAsync(async (req, res) => {
     const { fromCurrency, toCurrency, amount } = req.query;
@@ -459,18 +564,21 @@ const convertAmount = catchAsync(async (req, res) => {
 // Webhook Handler
 const handleWebhook = catchAsync(async (req, res) => {
     const payload = req.body;
-    const signature = req.headers['x-ccpayment-signature'];
+    const signature = req.headers['sign'];
+    const timestamp = req.headers['timestamp'];
+    const appIdHeader = req.headers['appid'];
 
-    if (!signature) {
+    // Check for required headers
+    if (!signature || !timestamp || !appIdHeader) {
         return res.status(httpStatus.BAD_REQUEST).json({
             success: false,
-            message: "Missing signature header"
+            message: "Missing required headers (Sign, Timestamp, or Appid)"
         });
     }
 
     try {
         // Verify webhook signature
-        const isValid = ccpaymentService.verifyWebhookSignature(payload, signature);
+        const isValid = ccpaymentService.verifyWebhookSignature(payload, signature, timestamp, appIdHeader);
 
         if (!isValid) {
             return res.status(httpStatus.UNAUTHORIZED).json({
@@ -479,98 +587,168 @@ const handleWebhook = catchAsync(async (req, res) => {
             });
         }
 
-        // Process webhook based on event type
-        const eventType = payload.eventType;
+        // Process webhook based on type
+        const type = payload.type;
 
-        if (eventType === 'deposit.completed' && payload.recordId) {
-            // This is a permanent address deposit
-            // Get the deposit details from CCPayment
-            const depositDetails = await ccpaymentService.getDepositRecord({ recordId: payload.recordId });
+        if (type === 'DirectDeposit') {
+            // This is a direct deposit webhook
+            // We handle both normal deposits and risky deposits (isFlaggedAsRisky) here
+            const { recordId, referenceId, coinSymbol, status, isFlaggedAsRisky } = payload.msg;
+
+            // Get the deposit details from CCPayment to verify
+            const depositDetails = await ccpaymentService.getDepositRecord({ recordId });
 
             if (depositDetails.success) {
                 const depositData = depositDetails.data;
 
-                // Find the permanent address in our database
-                const permanentAddress = await CCPaymentPermanentAddress.findOne({
-                    address: depositData.toAddress
-                });
+                // Find the permanent address in our database using referenceId
+                // referenceId format is "user_{user_id}_chain_{chain}"
+                const referenceIdParts = referenceId.split('_');
+                if (referenceIdParts.length >= 2) {
 
-                if (permanentAddress) {
-                    // Create a deposit record
-                    const depositRecord = await CCPaymentDeposit.create({
-                        user_id: permanentAddress.user_id,
-                        orderId: `perm_${payload.recordId}`, // Use a prefix to distinguish from regular orders
-                        amount: parseFloat(depositData.paidAmount),
-                        amountUSD: parseFloat(depositData.paidValue || depositData.paidAmount),
-                        currency: depositData.coinSymbol,
-                        status: 'completed',
-                        paymentUrl: '', // No payment URL for permanent address deposits
-                        completedAt: new Date(),
-                        metadata: { permanentDeposit: true, depositData, webhook: payload }
+                    // Find the permanent address
+                    const permanentAddress = await CCPaymentPermanentAddress.findOne({
+                        referenceId: referenceId
                     });
 
-                    // Update user wallet balance
-                    const walletCurrency = depositData.coinSymbol === 'USDT' ? 'USD' : depositData.coinSymbol;
-                    await walletUpdateService.updateWalletBalance({
-                        userId: permanentAddress.user_id,
-                        currency: walletCurrency,
-                        amount: parseFloat(depositData.paidAmount),
-                        operation: 'add',
-                        transactionType: 'Permanent Deposit'
-                    });
+                    if (permanentAddress) {
+                        // Check if this deposit is already processed
+                        const existingDeposit = await CCPaymentDeposit.findOne({
+                            orderId: `perm_${recordId}`
+                        });
+
+                        if (!existingDeposit) {
+                            // Only process if status is Success and not flagged as risky
+                            // or if you want to handle risky deposits differently
+                            if (status === 'Success') {
+                                // Create a deposit record
+                                await CCPaymentDeposit.create({
+                                    user_id: permanentAddress.user_id,
+                                    orderId: `perm_${recordId}`,
+                                    amount: parseFloat(depositData.paidAmount),
+                                    amountUSD: parseFloat(depositData.paidValue || depositData.paidAmount),
+                                    currency: coinSymbol,
+                                    status: isFlaggedAsRisky ? 'pending' : 'completed', // Mark risky deposits as pending
+                                    paymentUrl: '',
+                                    completedAt: isFlaggedAsRisky ? null : new Date(),
+                                    metadata: {
+                                        permanentDeposit: true,
+                                        depositData,
+                                        webhook: payload,
+                                        isFlaggedAsRisky
+                                    }
+                                });
+
+                                // Only update wallet balance if not flagged as risky
+                                if (!isFlaggedAsRisky) {
+                                    const walletCurrency = coinSymbol === 'USDT' ? 'USD' : coinSymbol;
+                                    await walletUpdateService.updateWalletBalance({
+                                        userId: permanentAddress.user_id,
+                                        currency: walletCurrency,
+                                        amount: parseFloat(depositData.paidAmount),
+                                        operation: 'add',
+                                        transactionType: 'Permanent Deposit'
+                                    });
+                                }
+
+                                // Log risky deposits for manual review
+                                if (isFlaggedAsRisky) {
+                                    console.warn(`Risky deposit detected: recordId=${recordId}, user=${permanentAddress.user_id}, amount=${depositData.paidAmount} ${coinSymbol}`);
+                                    // Maybe implement notification system for admins here
+                                }
+                            } else if (status === 'Processing') {
+                                // For processing deposits, create a record but mark as pending
+                                await CCPaymentDeposit.create({
+                                    user_id: permanentAddress.user_id,
+                                    orderId: `perm_${recordId}`,
+                                    amount: parseFloat(depositData.paidAmount || 0),
+                                    amountUSD: parseFloat(depositData.paidValue || depositData.paidAmount || 0),
+                                    currency: coinSymbol,
+                                    status: 'pending',
+                                    paymentUrl: '',
+                                    metadata: {
+                                        permanentDeposit: true,
+                                        depositData,
+                                        webhook: payload,
+                                        processingDeposit: true
+                                    }
+                                });
+                            }
+                        }
+                    } else {
+                        console.error(`Permanent address not found for referenceId: ${referenceId}`);
+                    }
                 }
             }
-        } else if (eventType === 'address.flagged_as_risky') {
-            // Handle risky address flagging
-            const address = payload.address;
-            const chain = payload.chain;
+        } else if (type === 'ApiWithdrawal') {
+            // Handle API withdrawal webhook
+            const orderId = payload.msg.orderId;
+            const status = payload.msg.status;
 
-            // Find and update the permanent address in our database
-            const permanentAddress = await CCPaymentPermanentAddress.findOne({ address });
-
-            if (permanentAddress) {
-                permanentAddress.isFlagged = true;
-                permanentAddress.flaggedAt = new Date();
-                permanentAddress.metadata = { ...permanentAddress.metadata, flaggedWebhook: payload };
-                await permanentAddress.save();
-
-                // You might want to notify the user that their address has been flagged
-                // and they should get a new one
-            }
-        } else if (eventType === 'withdrawal.status_update') {
-            // Handle withdrawal status update
-            const withdrawalId = payload.withdrawalId;
-            const status = payload.status;
-            const withdrawalRequest = await CCPaymentWithdrawal.findOne({ withdrawalId });
+            // Find the withdrawal request by orderId
+            const withdrawalRequest = await CCPaymentWithdrawal.findOne({ withdrawalId: orderId });
 
             if (withdrawalRequest) {
-                withdrawalRequest.status = status === 'completed' ? 'completed' :
-                                         status === 'processing' ? 'processing' :
-                                         status === 'failed' ? 'failed' : 'pending';
-
-                if (withdrawalRequest.status === 'completed') {
-                    withdrawalRequest.completedAt = new Date();
-                } else if (withdrawalRequest.status === 'failed' && withdrawalRequest.status !== 'failed') {
-                    // Refund the amount if withdrawal fails
-                    const walletCurrency = withdrawalRequest.currency === 'USDT' ? 'USD' : withdrawalRequest.currency;
-                    await walletUpdateService.updateWalletBalance({
-                        userId: withdrawalRequest.user_id,
-                        currency: walletCurrency,
-                        amount: withdrawalRequest.amount,
-                        operation: 'add',
-                        transactionType: 'Withdrawal Refund'
-                    });
+                // Map CCPayment status to our status format
+                let newStatus;
+                if (status === 'Success') {
+                    newStatus = 'completed';
+                } else if (status === 'Processing') {
+                    newStatus = 'processing';
+                } else if (status === 'Failed') {
+                    newStatus = 'failed';
+                } else if (status === 'WaitingApproval') {
+                    newStatus = 'pending';
+                } else if (status === 'Rejected') {
+                    newStatus = 'failed';
+                } else {
+                    newStatus = 'pending';
                 }
 
+                // Update status if changed
+                if (newStatus !== withdrawalRequest.status) {
+                    withdrawalRequest.status = newStatus;
+
+                    if (newStatus === 'completed') {
+                        withdrawalRequest.completedAt = new Date();
+                    } else if (newStatus === 'failed' && withdrawalRequest.status !== 'failed') {
+                        // Refund the amount if withdrawal fails
+                        const walletCurrency = withdrawalRequest.currency === 'USDT' ? 'USD' : withdrawalRequest.currency;
+                        await walletUpdateService.updateWalletBalance({
+                            userId: withdrawalRequest.user_id,
+                            currency: walletCurrency,
+                            amount: withdrawalRequest.amount,
+                            operation: 'add',
+                            transactionType: 'Withdrawal Refund'
+                        });
+                    }
+                }
+
+                // Update metadata with webhook data
                 withdrawalRequest.metadata = { ...withdrawalRequest.metadata, webhook: payload };
                 await withdrawalRequest.save();
+
+                // Get the full withdrawal record for additional details
+                try {
+                    const withdrawalRecord = await ccpaymentService.getWithdrawalRecord(orderId);
+                    if (withdrawalRecord.success) {
+                        withdrawalRequest.metadata = {
+                            ...withdrawalRequest.metadata,
+                            withdrawalRecord: withdrawalRecord.data
+                        };
+                        await withdrawalRequest.save();
+                    }
+                } catch (recordError) {
+                    console.error('Error fetching withdrawal record:', recordError);
+                }
             }
+        } else if (type === 'ActivateWebhookURL') {
+            console.log('Webhook URL activated:', payload.msg);
         }
 
-        return res.status(httpStatus.OK).json({
-            success: true,
-            message: "Webhook processed successfully"
-        });
+        // Set the content type as required by CCPayment
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        return res.status(httpStatus.OK).send('Success');
     } catch (error) {
         console.error('Webhook processing error:', error);
         return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
@@ -671,6 +849,45 @@ const unbindDepositAddress = catchAsync(async (req, res) => {
         });
     } catch (error) {
         console.error('Unbind deposit address error:', error);
+        return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+            success: false,
+            message: "Internal Server Error"
+        });
+    }
+});
+
+// Get deposit records list from CCPayment API
+const getDepositRecordsList = catchAsync(async (req, res) => {
+    const { coinId, referenceId, orderId, chain, startAt, endAt, nextId } = req.query;
+
+    try {
+        // Build params object
+        const params = {};
+
+        // Add parameters if provided
+        if (coinId) params.coinId = parseInt(coinId);
+        if (referenceId) params.referenceId = referenceId;
+        if (orderId) params.orderId = orderId;
+        if (chain) params.chain = chain;
+        if (startAt) params.startAt = parseInt(startAt);
+        if (endAt) params.endAt = parseInt(endAt);
+        if (nextId) params.nextId = nextId;
+
+        const ccpResponse = await ccpaymentService.getDepositRecordsList(params);
+
+        if (!ccpResponse.success) {
+            return res.status(httpStatus.BAD_REQUEST).json({
+                success: false,
+                message: ccpResponse.message || "Failed to get deposit records list"
+            });
+        }
+
+        return res.status(httpStatus.OK).json({
+            success: true,
+            data: ccpResponse.data
+        });
+    } catch (error) {
+        console.error('Get deposit records list error:', error);
         return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
             success: false,
             message: "Internal Server Error"
@@ -827,15 +1044,17 @@ module.exports = {
 
     // Deposit history
     getDepositHistory,
+    getDepositRecordsList,
 
     // Withdrawal endpoints
     createWithdrawalRequest,
     getWithdrawalStatus,
     getWithdrawalHistory,
+    getWithdrawalRecordsList,
 
     // Utility endpoints
-    getSupportedCurrencies,
-    getExchangeRates,
+    getCoinList,
+    getCoinPrices,
     convertAmount,
 
     // Webhook handler

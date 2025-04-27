@@ -11,6 +11,11 @@ const CCPaymentWithdrawalSchema = new schema({
         required: true,
         unique: true
     },
+    recordId: {
+        type: String,
+        sparse: true,
+        index: true
+    },
     amount: {
         type: Number,
         required: true,
