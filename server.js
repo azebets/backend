@@ -14,7 +14,7 @@ app.use(bodyParser.json({limit: '50mb'}));
 app.use(express.urlencoded({ extended: true , limit: '50mb'}));
 
 app.use(cors({
-  origin: ["https://azebets.com","http://localhost:5173", "https://azabets.netlify.app", "https://azebet-admin.netlify.app" ]
+  origin: ["https://azebets.com","http://localhost:5173", "https://azabetz.netlify.app", "https://azebet-admin.netlify.app" ]
 }));
 
 const server = createServer(app);
