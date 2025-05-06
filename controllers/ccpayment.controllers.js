@@ -43,7 +43,6 @@ const getPermanentDepositAddress = catchAsync(async (req, res) => {
         };
 
         const ccpResponse = await ccpaymentService.getOrCreateAppDepositAddress(reqData);
-        console.log(ccpResponse)
         if (!ccpResponse.success) {
             return res.status(httpStatus.BAD_REQUEST).json({
                 success: false,
