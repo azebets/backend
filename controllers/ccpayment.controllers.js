@@ -91,7 +91,7 @@ const getPermanentDepositAddress = catchAsync(async (req, res) => {
 
 const getDepositRecord = catchAsync(async (req, res) => {
     const { body: reqBody } = req;
-    const user_id = req.id;
+    const user_id = req.user.id;;
 
     if (!reqBody.recordId && !reqBody.txid) {
         return res.status(httpStatus.BAD_REQUEST).json({
@@ -125,7 +125,7 @@ const getDepositRecord = catchAsync(async (req, res) => {
 
 
 const getDepositHistory = catchAsync(async (req, res) => {
-    const user_id = req.id;
+    const user_id = req.user.id;;
     const { currency, page = 1, limit = 10 } = req.query;
 
     try {
@@ -167,7 +167,7 @@ const getDepositHistory = catchAsync(async (req, res) => {
 // Withdrawal Endpoints
 const createWithdrawalRequest = catchAsync(async (req, res) => {
     const { amount, amountUSD, coinId, chain, address, memo, merchantPayNetworkFee } = req.body;
-    const user_id = req.id;
+    const user_id = req.user.id;;
 
     if (!amount || !coinId || !address) {
         return res.status(httpStatus.BAD_REQUEST).json({
@@ -376,7 +376,7 @@ const getWithdrawalStatus = catchAsync(async (req, res) => {
 });
 
 const getWithdrawalHistory = catchAsync(async (req, res) => {
-    const user_id = req.id;
+    const user_id = req.user.id;;
     const { currency, page = 1, limit = 10 } = req.query;
 
     try {
@@ -757,7 +757,7 @@ const handleWebhook = catchAsync(async (req, res) => {
 
 // Get permanent deposit addresses for a user
 const getUserPermanentAddresses = catchAsync(async (req, res) => {
-    const user_id = req.id;
+    const user_id = req.user.id;;
     const { chain } = req.query;
 
     try {
@@ -793,7 +793,7 @@ const getUserPermanentAddresses = catchAsync(async (req, res) => {
 
 // Unbind a flagged deposit address
 const unbindDepositAddress = catchAsync(async (req, res) => {
-    const user_id = req.id;
+    const user_id = req.user.id;;
     const { address } = req.body;
     let { chain } = req.body;
 
@@ -894,7 +894,7 @@ const getDepositRecordsList = catchAsync(async (req, res) => {
 
 // Get permanent deposit history for a user
 const getPermanentDepositHistory = catchAsync(async (req, res) => {
-    const user_id = req.id;
+    const user_id = req.user.id;;
     const { currency, page = 1, limit = 10 } = req.query;
 
     try {

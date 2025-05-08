@@ -9,17 +9,34 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+// const transporter = nodemailer.createTransport({
+//   host: "smtp.hostinger.com",
+//   secure: true, 
+//   secureConnection: false,
+//   tls: {
+//      ciphers: "SSLv3",
+//   },
+//   requireTLS: true,
+//   port: 465,
+//   debug: true,
+//   connectionTimeout: 10000,
+//   auth: {
+//       user: "info@azebets.com",
+//       pass: "Keys2541?",
+//   },
+// });
+
 const sendEmail = async (to, subject, html) => {
   try {
     const mailOptions = {
-      from: '"Azabets Casino" valiantcodez@gmail.com', // Replace with your email
+      from: '"Azabets Casino"', // Replace with your email
       to,
       subject,
       html,
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log('Email sent successfully');
+    const res = await transporter.sendMail(mailOptions);
+    console.log(res);
   } catch (error) {
     console.error('Error sending email:', error);
     throw error;
