@@ -6,7 +6,7 @@ const { CrashGameEngine } = require('../controllers/games/crash');
 async function createsocket(httpServer) {
   const io = new Server(httpServer, {
     cors: {
-      origin: ["https://azebets.com", "http://localhost:5173"],
+      origin: ["https://azebets.com", "http://localhost:5173", "https://azebets.netlify.app"],
       methods: ["GET", "POST"],
       credentials: true,
     },
