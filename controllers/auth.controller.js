@@ -1,11 +1,19 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/user.model');
+const Campaign = require('../models/campaign.model'); // Import Campaign model
 const sendEmail = require('../services/emailService');
 const { generateVerificationCode } = require('../utils/utils');
+const crypto = require('crypto');
 
 // JWT secret key (replace with your actual secret)
 const JWT_SECRET = 'valiantjoeauth'; // Replace with your actual JWT secret
+
+// Generate a unique affiliate code
+const generateAffiliateCode = () => {
+  // Generate a random string of 8 characters (alphanumeric)
+  return crypto.randomBytes(4).toString('hex');
+};
 
 // User login
 const login = async (req, res) => {
@@ -25,7 +33,7 @@ const login = async (req, res) => {
     }
 
     // Generate JWT token
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '1d' });
 
     // Return user data and token
     res.status(200).json({
@@ -39,17 +47,17 @@ const login = async (req, res) => {
 
 // User registration
 const register = async (req, res) => {
-  const { email, password, username, language } = req.body;
+  const data  = req.body;
 
   try {
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email: data.email });
     if (existingUser) {
       return res.status(400).json({ message: 'Email already in use' });
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(data?.password, 10);
 
     // Generate a 6-digit verification code
     const verificationCode = generateVerificationCode();
@@ -57,23 +65,24 @@ const register = async (req, res) => {
     // Set expiration time for the verification code (10 minutes from now)
     const verificationCodeExpires = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Create new user
-    const newUser = new User({
-      email,
-      password: hashedPassword,
-      username,
-      language,
-      verificationCode,
-      verificationCodeExpires,
-      is_verified: false, // Mark as unverified initially
-    });
+    // Generate a unique affiliate code for this user
+    const affiliateCode = generateAffiliateCode();
 
-    await newUser.save();
+    // Check if a referral code was provided and is valid
+    let referrer = null;
+    if (data?.referralCode) {
+      referrer = await User.findOne({ 
+        $or: [
+          { affiliateCode: data?.referralCode },
+          { username: data?.referralCode }
+        ]
+      });
+    }
 
-    // Send a welcome email with the verification code
+        // Send a welcome email with the verification code
     const emailTemplate = `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-        <h2 style="color: #4CAF50;">Welcome to Azabets Casino, ${username}!</h2>
+        <h2 style="color: #4CAF50;">Welcome to Azabets Casino, ${data?.username}!</h2>
         <p>Thank you for registering with us. To complete your registration, please verify your account using the code below:</p>
         <div style="font-size: 24px; font-weight: bold; color: #4CAF50; margin: 20px 0;">${verificationCode}</div>
         <p>This code will expire in 10 minutes.</p>
@@ -82,18 +91,64 @@ const register = async (req, res) => {
       </div>
     `;
 
-    await sendEmail(email, 'Welcome to Azabets Casino - Verify Your Account', emailTemplate);
+    await sendEmail(data?.email, 'Welcome to Azabets Casino - Verify Your Account', emailTemplate);
+
+    // Create new user with all form data
+    const newUser = new User({
+      email: data.email,
+      password: hashedPassword,
+      username: data.username,
+      language: data?.language || 'English',
+      firstName: data.firstName,
+      lastName: data.lastName,
+      country: data.country,
+      state: data.state,
+      dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
+      residentAddress: data.residentAddress, // Store the address from the form
+      city: data.city,
+      postalCode: data.postalCode,
+      verificationCode,
+      verificationCodeExpires,
+      is_verified: false, // Mark as unverified initially
+      affiliateCode, // Add the generated affiliate code
+      referredBy: referrer ? referrer._id : null, // Store referrer's ID if available
+      referralCampaign: data.campaignCode || null, // Store campaign code if provided
+      referralCount: 0, // Initialize referral count
+      agreeToTerms: data.agreeToTerms || false
+    });
+
+    await newUser.save();
+
+    // If user was referred, increment the referrer's referral count
+    if (referrer) {
+      referrer.referralCount = (referrer.referralCount || 0) + 1;
+      
+      // Add this user to the referrer's referrals array if it exists in the model
+      if (referrer.referrals) {
+        referrer.referrals.push(newUser._id);
+      } else {
+        referrer.referrals = [newUser._id];
+      }
+      
+      await referrer.save();
+      
+      // If a campaign code was provided, update the campaign's referral count
+      if (data.campaignCode) {
+        await Campaign.findOneAndUpdate(
+          { code: data.campaignCode, userId: referrer._id },
+          { $inc: { referralCount: 1 } }
+        );
+      }
+    }
+
+
 
     // Generate JWT token
-    const token = jwt.sign({ id: newUser._id }, JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ id: newUser._id }, JWT_SECRET, { expiresIn: '1d' });
 
     // Return user data and token
     res.status(201).json({
-      user: {
-        id: newUser._id,
-        email: newUser.email,
-        username: newUser.username,
-      },
+      user:newUser,
       token,
     });
   } catch (error) {
@@ -130,6 +185,7 @@ const verifyAccount = async (req, res) => {
         <p>Dear ${user.username},</p>
         <p>We appreciate you taking the time to verify your email address. Your account is now fully activated.</p>
         <p>You can now enjoy all the features of Azabets Casino.</p>
+        <p>Remember, your affiliate code is: <strong>${user.affiliateCode}</strong>. Share it with friends to earn commissions!</p>
         <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
         <p>Best regards,<br>The Azabets Casino Team</p>
       </div>
@@ -167,6 +223,7 @@ const resendVerificationCode = async (req, res) => {
     const emailTemplate = `
       <p>Your new verification code is: <strong>${newCode}</strong></p>
       <p>This code will expire in 10 minutes.</p>
+      <p>Your affiliate code is: <strong>${user.affiliateCode}</strong></p>
     `;
 
     await sendEmail(email, 'Resend Verification Code', emailTemplate);
@@ -194,6 +251,31 @@ const getUserProfile = async (req, res) => {
   }
 };
 
+// Get user's referrals
+const getUserReferrals = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Find users who were referred by this user
+    const referrals = await User.find({ referredBy: userId })
+      .select('username email createdAt is_verified')
+      .sort({ createdAt: -1 });
+    
+    res.status(200).json({
+      referralCount: referrals.length,
+      referrals
+    });
+  } catch (error) {
+    console.error('Get referrals error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
 
-
-module.exports = { login, resendVerificationCode, register, verifyAccount, resendVerificationCode, getUserProfile };
+module.exports = { 
+  login, 
+  register, 
+  verifyAccount, 
+  resendVerificationCode, 
+  getUserProfile,
+  getUserReferrals
+};

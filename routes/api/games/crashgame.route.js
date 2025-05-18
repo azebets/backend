@@ -1,7 +1,7 @@
 const express = require('express')
 const router = express.Router()
-const requireAuth = require('../../../middleware/requireAuth')
-const game = require('../../../games/crash.controllers');
+const requireAuth = require('../../../middleware/authMiddleware')
+const game = require('../../../controllers/games/crash.controller');
 
 router.post('/scripts/list', game.handleScriptList)
 router.get('/history', game.handleCrashHistory)

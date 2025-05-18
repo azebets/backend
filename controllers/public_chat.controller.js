@@ -20,14 +20,32 @@ class Chat {
 
             // Listen for incoming messages
             socket.on('send_message', async (data) => {
-                console.log('Message received:', data);
+           
 
-                // Save the message to the database
-                const newMessage = new ChatModel(data);
-                await newMessage.save();
+                try {
+                    // Validate message data
+                    if (!data.username || !data.content) {
+                        console.error('Invalid message format:', data);
+                        return;
+                    }
 
-                // Broadcast the message to all connected clients
-                this.io.emit('receive_message', data);
+                    // Create a message object with all required fields
+                    const messageData = {
+                        username: data.username,
+                        content: data.content,
+                        vipLevel: data.vipLevel || 0, // Store VIP level directly
+                        timestamp: data.timestamp ? new Date(data.timestamp) : new Date()
+                    };
+                    // Save the message to the database
+                    const newMessage = new ChatModel(messageData);
+                    await newMessage.save();
+                    // Broadcast the message to all connected clients
+                    this.io.emit('receive_message', messageData);
+                } catch (error) {
+                    console.error('Error saving message:', error);
+                    // Optionally notify the sender that the message failed to save
+                    socket.emit('message_error', { error: 'Failed to save message' });
+                }
             });
 
             // Handle user disconnect

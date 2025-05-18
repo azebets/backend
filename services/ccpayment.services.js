@@ -5,17 +5,17 @@ const httpStatus = require('http-status');
 require("dotenv").config();
 
 // CCPayment API Configuration
-const appId = process.env.CCP_APP_ID || "202310100835461711661791690612736";
-const appSecret = process.env.CCP_APP_SECRET || "676b46977a75ff473f5ed0d3eaad3e44";
-const merchantId = process.env.CCP_MERCHANT_ID || "14094";
-const apiBaseUrl = process.env.CCP_API_BASE_URL || 'https://ccpayment.com/ccpayment/v2';
-
-// // CCPayment API Configuration (Valiant Joe)
-// const appId = process.env.CCP_APP_ID || "g41CQgKXdWS8qpzz";
-// const appSecret = process.env.CCP_APP_SECRET || "f7a037c7632163612e9b1c06beb5da52";
-// const merchantId = process.env.CCP_MERCHANT_ID || "26738";
+// const appId = process.env.CCP_APP_ID || "202310100835461711661791690612736";
+// const appSecret = process.env.CCP_APP_SECRET || "676b46977a75ff473f5ed0d3eaad3e44";
+// const merchantId = process.env.CCP_MERCHANT_ID || "14094";
 // const apiBaseUrl = process.env.CCP_API_BASE_URL || 'https://ccpayment.com/ccpayment/v2';
 
+// CCPayment API Configuration (Valiant Joe)
+const appId = process.env.CCP_APP_ID || "g41CQgKXdWS8qpzz";
+const appSecret = process.env.CCP_APP_SECRET || "f7a037c7632163612e9b1c06beb5da52";
+const merchantId = process.env.CCP_MERCHANT_ID || "26738";
+const apiBaseUrl = process.env.CCP_API_BASE_URL || 'https://ccpayment.com/ccpayment/v2';
+ 
 // Default to Ethereum blockchain for all chain parameters
 const DEFAULT_CHAIN = 'ETH';
 
