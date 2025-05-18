@@ -68,8 +68,8 @@ const initializeVipTiers = async () => {
       }
     ];
     
-    await VipTier.insertMany(defaultTiers);
-    console.log('Default VIP tiers initialized');
+    // await VipTier.insertMany(defaultTiers);
+    // console.log('Default VIP tiers initialized');
   }
 };
 

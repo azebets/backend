@@ -247,11 +247,13 @@ class CrashGameEngine {
     if (rate >= this.game.crash_point) {
       rate = this.game.crash_point;
       //crashed
+       const session = await mongoose.startSession();
+            session.startTransaction();
       try {
-        await CrashGameModel.updateOne(
-          { game_id: this.game.gameId },
-          { status: 3 }
-        );
+         await CrashGameModel.updateOne(
+           { game_id: this.game.gameId },
+           { status: 3 }
+         ).session(session);
         const crashedAt = Date.now();
         this.game.status = 3;
         this.io.to("crash-game").emit("ed", {
@@ -259,7 +261,7 @@ class CrashGameEngine {
           hash: this.game.hash,
         });
 
-        await this.handlePayouts(rate);
+        await this.handlePayouts(rate, session);
 
         this.io.to("crash-game").emit("mybet", {
           bets: [
@@ -325,8 +327,11 @@ class CrashGameEngine {
         if (timeDiff < NEXT_GAME_DELAY)
           await waitFor(NEXT_GAME_DELAY - timeDiff);
         await this.run();
-      } catch (error) {
+      }  catch (error) {
         console.log("Error in game end ", error);
+        await session.abortTransaction();
+      } finally {
+        await session.endSession();
       }
     } else {
       const autoEscapes = this.game.bets.filter(
@@ -410,28 +415,32 @@ class CrashGameEngine {
           this.game.escapes.find((e) => e.userId === bet.userId)?.rate || rate,
         (bet) =>
           this.game.escapes.findIndex((e) => e.userId === bet.userId) !== -1,
-        "Classic"
+        "Classic",
+        session
       );
 
       const redBets = this.getBetPromises(
         this.game.xBets.filter((b) => b.x === -200),
         () => 1.96,
         () => rate < 2,
-        "Red"
+        "Red",
+        session
       );
 
       const greenBets = this.getBetPromises(
         this.game.xBets.filter((b) => b.x === 200),
         () => 2,
         () => rate >= 2,
-        "Green"
+        "Green",
+        session
       );
 
       const moonBets = this.getBetPromises(
         this.game.xBets.filter((b) => b.x === 1000),
         () => 10,
         () => rate >= 10,
-        "Moon"
+        "Moon",
+        session
       );
       await Promise.all([
         ...normalBets,
@@ -444,9 +453,9 @@ class CrashGameEngine {
             end: new Date(),
             concluded: true,
           }
-        )
+        ).session(session)
       ]);
-
+          await session.commitTransaction();
       // Release lock
       await CrashGameLock.deleteOne({ game_id: this.game.gameId });
     } else {
@@ -454,7 +463,7 @@ class CrashGameEngine {
     }
   }
  
-  getBetPromises(bets, getPayout, wonCallback, bet_type) {
+  getBetPromises(bets, getPayout, wonCallback, bet_type, session) {
     const betPromisses = [];
     for (let i = 0; i < bets.length; i++) {
       const bet = bets[i];
@@ -481,7 +490,7 @@ class CrashGameEngine {
             UserBalance.findByIdAndUpdate(
               bet.userId,
               { $inc: { balance: winnings } }
-            )
+            ).session(session)
           );
         }
         // For bets that lost, we don't need to do anything (bet amount was already deducted)
@@ -501,9 +510,8 @@ class CrashGameEngine {
             bet_time: bet.betTime,
             won,
           }
-        ]).then(([bh]) => {
+        ],{ session }).then(([bh]) => {
           (bet.betId = bh.bet_id), (bet.betType = bet_type);
-          
           // Only create a bill if we haven't already created one in handleEscape
           if (!alreadyUpdated) {
             const winningAmount = bet.won ? bet.bet * rate - bet.bet : bet.bet;
