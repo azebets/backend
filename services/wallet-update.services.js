@@ -16,8 +16,6 @@ const {convertToUSDT} = require("../services/convertion.services");
  */
 const updateWalletBalance = async (data) => {
   const { userId, currency, amount, operation, transactionType } = data;
-
-  console.log(userId, currency, amount, operation, transactionType)
   
   // Start a transaction to ensure data consistency
   const session = await mongoose.startSession();
@@ -31,9 +29,8 @@ const updateWalletBalance = async (data) => {
     // Determine which wallet to update based on currency
 
     wallet = await USDTWALLET.findById(userId ).session(session);
-    console.log(wallet)
     tokenImg = wallet.coin_image;
-    tokenName = currency;
+    tokenName = currency === TETH  ? "ETH" : currency;
     convertAmount = await convertToUSDT(currency, amount);
     
     if (!wallet) {
