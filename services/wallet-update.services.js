@@ -30,7 +30,8 @@ const updateWalletBalance = async (data) => {
     let convertAmount;
     // Determine which wallet to update based on currency
 
-    wallet = await USDTWALLET.findOne({ user_id: userId }).session(session);
+    wallet = await USDTWALLET.findById({ userId }).session(session);
+    console.log(wallet)
     tokenImg = wallet.coin_image;
     tokenName = currency;
     convertAmount = await convertToUSDT(currency, amount);
