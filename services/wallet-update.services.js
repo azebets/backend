@@ -30,7 +30,7 @@ const updateWalletBalance = async (data) => {
     let convertAmount;
     // Determine which wallet to update based on currency
 
-    wallet = await USDTWALLET.findById({ userId }).session(session);
+    wallet = await USDTWALLET.findById(userId ).session(session);
     console.log(wallet)
     tokenImg = wallet.coin_image;
     tokenName = currency;
@@ -56,7 +56,7 @@ const updateWalletBalance = async (data) => {
     // Update wallet balance
 
       const respose = await USDTWALLET.findByIdAndUpdate(
-        { userId },
+         userId ,
         { balance: newBalance },
         { session }
       );
@@ -84,7 +84,7 @@ const updateWalletBalance = async (data) => {
     session.endSession();
     
 
-   return await USDTWALLET.findOne({ user_id: userId });
+   return 
 
   } catch (error) {
     // Abort the transaction on error
