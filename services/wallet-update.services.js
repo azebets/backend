@@ -30,8 +30,9 @@ const updateWalletBalance = async (data) => {
 
     wallet = await USDTWALLET.findById(userId ).session(session);
     tokenImg = wallet.coin_image;
-    tokenName = currency === "TETH"  ? "ETH" : currency;
-    convertAmount = await convertToUSDT(currency, amount);
+    tokenName = currency;
+    let convertCurrency = currency === "TETH"  ? "ETH" : currency;
+    convertAmount = await convertToUSDT(convertCurrency, amount);
     
     if (!wallet) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Wallet not found');
