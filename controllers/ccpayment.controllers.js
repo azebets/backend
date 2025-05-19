@@ -619,8 +619,7 @@ const handleWebhook = catchAsync(async (req, res) => {
                             // Only process if status is Success and not flagged as risky
                             // or if you want to handle risky deposits differently
                             if (status === 'Success') {
-                                // Create a deposit record
-                                await CCPaymentDeposit.create({
+                                console.log({
                                     user_id: permanentAddress.user_id,
                                     orderId: `perm_${recordId}`,
                                     amount: parseFloat(depositData.paidAmount),
@@ -635,7 +634,24 @@ const handleWebhook = catchAsync(async (req, res) => {
                                         webhook: payload,
                                         isFlaggedAsRisky
                                     }
-                                });
+                                })
+                                // Create a deposit record
+                                // await CCPaymentDeposit.create({
+                                //     user_id: permanentAddress.user_id,
+                                //     orderId: `perm_${recordId}`,
+                                //     amount: parseFloat(depositData.paidAmount),
+                                //     amountUSD: parseFloat(depositData.paidValue || depositData.paidAmount),
+                                //     currency: coinSymbol,
+                                //     status: isFlaggedAsRisky ? 'pending' : 'completed', // Mark risky deposits as pending
+                                //     paymentUrl: '',
+                                //     completedAt: isFlaggedAsRisky ? null : new Date(),
+                                //     metadata: {
+                                //         permanentDeposit: true,
+                                //         depositData,
+                                //         webhook: payload,
+                                //         isFlaggedAsRisky
+                                //     }
+                                // });
                                 console.log({
                                         userId: permanentAddress.user_id,
                                         currency: walletCurrency,
@@ -663,7 +679,7 @@ const handleWebhook = catchAsync(async (req, res) => {
                                 }
                             } else if (status === 'Processing') {
                                 // For processing deposits, create a record but mark as pending
-                                await CCPaymentDeposit.create({
+                                console.log({
                                     user_id: permanentAddress.user_id,
                                     orderId: `perm_${recordId}`,
                                     amount: parseFloat(depositData.paidAmount || 0),
@@ -677,7 +693,22 @@ const handleWebhook = catchAsync(async (req, res) => {
                                         webhook: payload,
                                         processingDeposit: true
                                     }
-                                });
+                                })
+                                // await CCPaymentDeposit.create({
+                                //     user_id: permanentAddress.user_id,
+                                //     orderId: `perm_${recordId}`,
+                                //     amount: parseFloat(depositData.paidAmount || 0),
+                                //     amountUSD: parseFloat(depositData.paidValue || depositData.paidAmount || 0),
+                                //     currency: coinSymbol,
+                                //     status: 'pending',
+                                //     paymentUrl: '',
+                                //     metadata: {
+                                //         permanentDeposit: true,
+                                //         depositData,
+                                //         webhook: payload,
+                                //         processingDeposit: true
+                                //     }
+                                // });
                             }
                         }
                     } else {
