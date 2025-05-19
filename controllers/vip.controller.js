@@ -228,4 +228,4 @@ exports.getAllVipTiers = async (req, res) => {
 };
 
 // Initialize VIP tiers when the controller is loaded
-initializeVipTiers().catch(console.error);
+// initializeVipTiers().catch(console.error);
