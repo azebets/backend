@@ -16,6 +16,8 @@ const {convertToUSDT} = require("../services/convertion.services");
  */
 const updateWalletBalance = async (data) => {
   const { userId, currency, amount, operation, transactionType } = data;
+
+  console.log(userId, currency, amount, operation, transactionType)
   
   // Start a transaction to ensure data consistency
   const session = await mongoose.startSession();
@@ -30,7 +32,7 @@ const updateWalletBalance = async (data) => {
 
     wallet = await USDTWALLET.findOne({ user_id: userId }).session(session);
     tokenImg = wallet.coin_image;
-    tokenName = wallet.coin_name;
+    tokenName = currency;
     convertAmount = await convertToUSDT(currency, amount);
     
     if (!wallet) {
@@ -52,19 +54,20 @@ const updateWalletBalance = async (data) => {
     
     // Update wallet balance
 
-      await USDTWALLET.updateOne(
-        { user_id: userId },
+      const respose = await USDTWALLET.findByIdAndUpdate(
+        { userId },
         { balance: newBalance },
         { session }
       );
   
+      console.log(respose)
     
     // Create bill record
     const billId = Math.floor(Math.random() * 1000000000);
     const billData = {
       user_id: userId,
       transaction_type: transactionType,
-      token_img: tokenImg,
+      token_img: tokenImg || "",
       token_name: tokenName,
       balance: newBalance,
       trx_amount: convertAmount,

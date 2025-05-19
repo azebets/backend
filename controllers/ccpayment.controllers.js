@@ -619,8 +619,9 @@ const handleWebhook = catchAsync(async (req, res) => {
                             // Only process if status is Success and not flagged as risky
                             // or if you want to handle risky deposits differently
                             if (status === 'Success') {
-                                console.log({
-                                    user_id: permanentAddress.user_id,
+                                // Create a deposit record
+                                await CCPaymentDeposit.create({
+                                      user_id: permanentAddress.user_id,
                                     orderId: `perm_${recordId}`,
                                     amount: depositData.amount,
                                     amountUSD: depositData.coinUSDPrice,
@@ -634,42 +635,17 @@ const handleWebhook = catchAsync(async (req, res) => {
                                         webhook: payload,
                                         isFlaggedAsRisky
                                     }
-                                })
-                                // Create a deposit record
-                                // await CCPaymentDeposit.create({
-                                //     user_id: permanentAddress.user_id,
-                                //     orderId: `perm_${recordId}`,
-                                //     amount: parseFloat(depositData.paidAmount),
-                                //     amountUSD: parseFloat(depositData.paidValue || depositData.paidAmount),
-                                //     currency: coinSymbol,
-                                //     status: isFlaggedAsRisky ? 'pending' : 'completed', // Mark risky deposits as pending
-                                //     paymentUrl: '',
-                                //     completedAt: isFlaggedAsRisky ? null : new Date(),
-                                //     metadata: {
-                                //         permanentDeposit: true,
-                                //         depositData,
-                                //         webhook: payload,
-                                //         isFlaggedAsRisky
-                                //     }
-                                // });
-                                // console.log({
-                                //         userId: permanentAddress.user_id,
-                                //         currency: walletCurrency,
-                                //         amount: parseFloat(depositData.paidAmount),
-                                //         operation: 'add',
-                                //         transactionType: 'Permanent Deposit'
-                                //     })
-
+                                });
                                 // Only update wallet balance if not flagged as risky
                                 if (!isFlaggedAsRisky) {
                                     const walletCurrency = coinSymbol === 'USDT' ? 'USDT' : coinSymbol;
-                                    // await walletUpdateService.updateWalletBalance({
-                                    //     userId: permanentAddress.user_id,
-                                    //     currency: walletCurrency,
-                                    //     amount: parseFloat(depositData.paidAmount),
-                                    //     operation: 'add',
-                                    //     transactionType: 'Permanent Deposit'
-                                    // });
+                                    await walletUpdateService.updateWalletBalance({
+                                        userId: permanentAddress.user_id,
+                                        currency: walletCurrency,
+                                        amount: parseFloat(depositData.amount),
+                                        operation: 'add',
+                                        transactionType: 'Permanent Deposit'
+                                    });
                                 }
 
                                 // Log risky deposits for manual review
