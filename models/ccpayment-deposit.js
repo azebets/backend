@@ -3,7 +3,8 @@ const schema = mongoose.Schema;
 
 const CCPaymentDepositSchema = new schema({
     user_id: {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
         required: true,
     },
     orderId: {

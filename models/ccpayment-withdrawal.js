@@ -3,7 +3,8 @@ const schema = mongoose.Schema;
 
 const CCPaymentWithdrawalSchema = new schema({
     user_id: {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
         required: true,
     },
     withdrawalId: {
