@@ -682,10 +682,10 @@ const handleWebhook = catchAsync(async (req, res) => {
                                 console.log({
                                     user_id: permanentAddress.user_id,
                                     orderId: `perm_${recordId}`,
-                                    amount: parseFloat(depositData.paidAmount || 0),
-                                    amountUSD: parseFloat(depositData.paidValue || depositData.paidAmount || 0),
+                                    amount: depositData.paidAmount,
+                                    amountUSD: depositData.paidAmount ,
                                     currency: coinSymbol,
-                                    status: 'pending',
+                                    status: status || 'pending',
                                     paymentUrl: '',
                                     metadata: {
                                         permanentDeposit: true,
