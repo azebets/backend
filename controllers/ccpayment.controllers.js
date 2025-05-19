@@ -594,6 +594,8 @@ const handleWebhook = catchAsync(async (req, res) => {
             // We handle both normal deposits and risky deposits (isFlaggedAsRisky) here
             const { recordId, referenceId, coinSymbol, status, isFlaggedAsRisky } = payload.msg;
 
+            console.log(recordId, referenceId, coinSymbol, status, isFlaggedAsRisky)
+
             // Get the deposit details from CCPayment to verify
             const depositDetails = await ccpaymentService.getDepositRecord({ recordId });
 
