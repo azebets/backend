@@ -595,11 +595,11 @@ const handleWebhook = catchAsync(async (req, res) => {
 
             // Get the deposit details from CCPayment to verify
             const depositDetails = await ccpaymentService.getDepositRecord({ recordId });
-            console.log("depositDetails", depositDetails);
 
             if (depositDetails.success) {
-                const depositData = depositDetails.data;
-
+                const depositDataEl = depositDetails.data;
+                const depositData = depositDetails.data?.record;
+                console.log(depositDataEl)
                 // Find the permanent address in our database using referenceId
                 // referenceId format is "user_{user_id}_chain_{chain}"
                 const referenceIdParts = referenceId.split('_');
