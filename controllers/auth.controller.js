@@ -80,18 +80,18 @@ const register = async (req, res) => {
     }
 
         // Send a welcome email with the verification code
-    const emailTemplate = `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-        <h2 style="color: #4CAF50;">Welcome to Azabets Casino, ${data?.username}!</h2>
-        <p>Thank you for registering with us. To complete your registration, please verify your account using the code below:</p>
-        <div style="font-size: 24px; font-weight: bold; color: #4CAF50; margin: 20px 0;">${verificationCode}</div>
-        <p>This code will expire in 10 minutes.</p>
-        <p>If you did not register for this account, please ignore this email.</p>
-        <p>Best regards,<br>The Azabets Casino Team</p>
-      </div>
-    `;
+    // const emailTemplate = `
+    //   <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+    //     <h2 style="color: #4CAF50;">Welcome to Azabets Casino, ${data?.username}!</h2>
+    //     <p>Thank you for registering with us. To complete your registration, please verify your account using the code below:</p>
+    //     <div style="font-size: 24px; font-weight: bold; color: #4CAF50; margin: 20px 0;">${verificationCode}</div>
+    //     <p>This code will expire in 10 minutes.</p>
+    //     <p>If you did not register for this account, please ignore this email.</p>
+    //     <p>Best regards,<br>The Azabets Casino Team</p>
+    //   </div>
+    // `;
 
-    await sendEmail(data?.email, 'Welcome to Azabets Casino - Verify Your Account', emailTemplate);
+    // await sendEmail(data?.email, 'Welcome to Azabets Casino - Verify Your Account', emailTemplate);
 
     // Create new user with all form data
     const newUser = new User({
