@@ -595,6 +595,7 @@ const handleWebhook = catchAsync(async (req, res) => {
 
             // Get the deposit details from CCPayment to verify
             const depositDetails = await ccpaymentService.getDepositRecord({ recordId });
+            console.log("depositDetails", depositDetails);
 
             if (depositDetails.success) {
                 const depositData = depositDetails.data;
