@@ -31,7 +31,7 @@ const CCPaymentDepositSchema = new schema({
     },
     paymentUrl: {
         type: String,
-        required: true,
+
     },
     createdAt: {
         type: Date,

@@ -587,6 +587,8 @@ const handleWebhook = catchAsync(async (req, res) => {
         // Process webhook based on type
         const type = payload.type;
 
+        console.log(type)
+
         if (type === 'DirectDeposit') {
             // This is a direct deposit webhook
             // We handle both normal deposits and risky deposits (isFlaggedAsRisky) here
