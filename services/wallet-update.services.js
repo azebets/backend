@@ -53,13 +53,12 @@ const updateWalletBalance = async (data) => {
     
     // Update wallet balance
 
-      const respose = await USDTWALLET.findByIdAndUpdate(
+       await USDTWALLET.findByIdAndUpdate(
          userId ,
         { balance: newBalance },
         { session }
       );
   
-      console.log(respose)
     
     // Create bill record
     const billId = Math.floor(Math.random() * 1000000000);

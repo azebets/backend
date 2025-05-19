@@ -647,7 +647,6 @@ const handleWebhook = catchAsync(async (req, res) => {
                                         transactionType: 'Permanent Deposit'
                                     });
                                 }
-
                                 // Log risky deposits for manual review
                                 if (isFlaggedAsRisky) {
                                     console.warn(`Risky deposit detected: recordId=${recordId}, user=${permanentAddress.user_id}, amount=${depositData.paidAmount} ${coinSymbol}`);
@@ -655,36 +654,21 @@ const handleWebhook = catchAsync(async (req, res) => {
                                 }
                             } else if (status === 'Processing') {
                                 // For processing deposits, create a record but mark as pending
-                                // console.log({
-                                //     user_id: permanentAddress.user_id,
-                                //     orderId: `perm_${recordId}`,
-                                //     amount: depositData.paidAmount,
-                                //     amountUSD: depositData.paidAmount ,
-                                //     currency: coinSymbol,
-                                //     status: status || 'pending',
-                                //     paymentUrl: '',
-                                //     metadata: {
-                                //         permanentDeposit: true,
-                                //         depositData,
-                                //         webhook: payload,
-                                //         processingDeposit: true
-                                //     }
-                                // })
-                                // await CCPaymentDeposit.create({
-                                //     user_id: permanentAddress.user_id,
-                                //     orderId: `perm_${recordId}`,
-                                //     amount: parseFloat(depositData.paidAmount || 0),
-                                //     amountUSD: parseFloat(depositData.paidValue || depositData.paidAmount || 0),
-                                //     currency: coinSymbol,
-                                //     status: 'pending',
-                                //     paymentUrl: '',
-                                //     metadata: {
-                                //         permanentDeposit: true,
-                                //         depositData,
-                                //         webhook: payload,
-                                //         processingDeposit: true
-                                //     }
-                                // });
+                                await CCPaymentDeposit.create({
+                                    user_id: permanentAddress.user_id,
+                                    orderId: `perm_${recordId}`,
+                                    amount: parseFloat(depositData.amount),
+                                    amountUSD: parseFloat(depositData.coinUSDPrice),
+                                    currency: coinSymbol,
+                                    status: 'pending',
+                                    paymentUrl: '',
+                                    metadata: {
+                                        permanentDeposit: true,
+                                        depositData,
+                                        webhook: payload,
+                                        processingDeposit: true
+                                    }
+                                });
                             }
                         }
                     } else {

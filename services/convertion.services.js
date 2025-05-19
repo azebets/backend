@@ -76,10 +76,6 @@ async function convertToUSDT(cryptoSymbol, amount) {
     }
 }
 
-async function iuio(){
-    console.log(await convertToUSDT("ETH", 0.001));
-}
-iuio()
 /**
  * Check if a cryptocurrency is a stablecoin
  * @param {string} symbol - The cryptocurrency symbol
