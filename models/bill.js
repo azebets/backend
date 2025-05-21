@@ -27,7 +27,7 @@ const Userschema = new schema({
         required: true,
     },
     bill_id: {
-        type: Number,
+        type: String,
         required: true,
     },
     datetime: {

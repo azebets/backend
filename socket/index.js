@@ -1,8 +1,9 @@
 const { Server } = require("socket.io");
 const Chat = require("../controllers/public_chat.controller.js");
-// const { CrashGameEngine } = require("../controllers/games/crash.controller.js");
 const { CrashGameEngine } = require('../controllers/games/crash');
 const { initMinesGame } = require('../controllers/games/mines');
+const { PlinkoGameSocket }  = require('../controllers/games/plinko');
+const DiceGameSocket = require("../controllers/games/dice/DiceGame.js")
 
 async function createsocket(httpServer) {
   const io = new Server(httpServer, {
@@ -25,10 +26,15 @@ crashGame.run((bet) => {
   io.emit('new-bet', bet);
 });
 const minesGameEngine = initMinesGame(io);
-global.gameEngines = {
-  mines: minesGameEngine,
-  // other games...
-};
+const plinkoController = new PlinkoGameSocket(io);
+const diceController = new DiceGameSocket(io);
+diceController.listen()
+// global.gameEngines = {
+//   mines: minesGameEngine,
+//   plinko: plinkoController,
+//   dice: diceController
+//   // other games...
+// };
 
   io.on("connection", (socket) => {
     console.log("New client connected:", socket.id);

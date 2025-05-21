@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const mainRouter = express.Router();
-const requireAuth = require('../../../middleware/requireAuth');
-const controller = require('../../../games/plinko.controller');
-
+const requireAuth = require('../../../middleware/authMiddleware');
+const controller = require('../../../controllers/games/plinko');
 
 
 // auth middleware

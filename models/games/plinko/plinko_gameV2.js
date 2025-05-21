@@ -7,7 +7,8 @@ const CounterSchema = new schema({
 const Counter = mongoose.model('PlinkoGameCounter', CounterSchema);
 const Schema = new schema({
     user_id: {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
         required: true,
     },
     bet_amount: {

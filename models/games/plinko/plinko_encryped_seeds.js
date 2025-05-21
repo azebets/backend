@@ -11,7 +11,8 @@ const Schema = new schema({
         default: 1
     },
     user_id: {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
         required: true,
     },
     server_seed: {
