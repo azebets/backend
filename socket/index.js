@@ -4,6 +4,7 @@ const { CrashGameEngine } = require('../controllers/games/crash');
 const { initMinesGame } = require('../controllers/games/mines');
 const { PlinkoGameSocket }  = require('../controllers/games/plinko');
 const DiceGameSocket = require("../controllers/games/dice/DiceGame.js")
+const limboGame = require("../controllers/games/limbo/LimboGame.js")
 
 async function createsocket(httpServer) {
   const io = new Server(httpServer, {
@@ -28,7 +29,9 @@ crashGame.run((bet) => {
 const minesGameEngine = initMinesGame(io);
 const plinkoController = new PlinkoGameSocket(io);
 const diceController = new DiceGameSocket(io);
+const limboController = new limboGame(io);
 diceController.listen()
+limboController.listen()
 // global.gameEngines = {
 //   mines: minesGameEngine,
 //   plinko: plinkoController,
