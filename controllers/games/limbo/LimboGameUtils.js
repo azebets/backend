@@ -91,8 +91,8 @@ function validateBetParams(betAmount, target, mode) {
     throw new Error('Invalid bet amount');
   }
   
-  if (isNaN(target) || target < 2 || target > 98) {
-    throw new Error('Invalid target value (must be between 2 and 98)');
+  if (isNaN(target) || target < 1.01 || target > 1000) {
+    throw new Error('Invalid target value (must be between 1.01 and 1000)');
   }
   
   if (mode !== 'over' && mode !== 'under') {

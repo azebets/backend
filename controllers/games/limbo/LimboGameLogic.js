@@ -8,14 +8,22 @@ function generateHash(clientSeed, nonce, serverSeed) {
   return hmac.digest('hex');
 }
 
-// Generate a Limbo roll from a hash
+// Generate a Limbo multiplier from a hash
 function generateLimboRoll(hash) {
-  // Use first 8 characters of the hash to generate a number between 0 and 100
-  const roll = parseInt(hash.substr(0, 8), 16) / 0xffffffff * 100;
-  return parseFloat(roll.toFixed(2));
+  // Use first 8 characters of the hash to generate a number between 0 and 1
+  const h = parseInt(hash.substr(0, 8), 16);
+  const result = h / 0xffffffff;
+  
+  // Calculate the multiplier using the house edge formula
+  // This formula creates a fair distribution with a 1% house edge
+  const houseEdge = 0.01; // 1% house edge
+  const multiplier = 99 / (result * 100);
+  
+  // Return the multiplier with 2 decimal places, minimum of 1.00
+  return parseFloat(Math.max(1.00, multiplier).toFixed(2));
 }
 
-// Check if a roll is a win based on target and mode
+// Check if a roll is a win based on target multiplier and mode
 function isWin(roll, target, mode) {
   if (mode === 'over') {
     return roll > target;
@@ -24,12 +32,14 @@ function isWin(roll, target, mode) {
   }
 }
 
-// Calculate win chance based on target and mode
+// Calculate win chance based on target multiplier and mode
 function calculateWinChance(target, mode) {
   if (mode === 'over') {
-    return 100 - target;
+    // For 'over' mode: chance = 99/target
+    return parseFloat((99 / target).toFixed(2));
   } else {
-    return target;
+    // For 'under' mode: chance = (target - 1) / (100 - 1) * 99
+    return parseFloat(((target - 1) / 99 * 100).toFixed(2));
   }
 }
 
@@ -39,11 +49,10 @@ function calculateMultiplier(winChance) {
   return parseFloat((99 / winChance).toFixed(2));
 }
 
-// Calculate win amount based on bet amount, target, and mode
-function calculateWinAmount(betAmount, target, mode) {
+// Calculate payout multiplier for a given target and mode
+function calculatePayoutMultiplier(target, mode) {
   const winChance = calculateWinChance(target, mode);
-  const multiplier = calculateMultiplier(winChance);
-  return multiplier;
+  return parseFloat((99 / winChance).toFixed(2));
 }
 
 // Validate bet parameters
@@ -52,8 +61,8 @@ function validateBet(betAmount, target, mode) {
     throw new Error('Invalid bet amount');
   }
   
-  if (isNaN(target) || target < 2 || target > 98) {
-    throw new Error('Invalid target value (must be between 2 and 98)');
+  if (isNaN(target) || target < 1.01 || target > 1000) {
+    throw new Error('Invalid target multiplier (must be between 1.01 and 1000)');
   }
   
   if (mode !== 'over' && mode !== 'under') {
@@ -67,6 +76,6 @@ module.exports = {
   isWin,
   calculateWinChance,
   calculateMultiplier,
-  calculateWinAmount,
+  calculatePayoutMultiplier,
   validateBet
 };

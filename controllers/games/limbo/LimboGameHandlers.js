@@ -14,7 +14,7 @@ async function handleBet(data, emitter) {
     // Validate bet parameters
     gameLogic.validateBet(
       parseFloat(data.betAmount), 
-      betValue.target, 
+      parseFloat(betValue.target), 
       betValue.mode
     );
     
@@ -40,7 +40,7 @@ async function handleBet(data, emitter) {
       ]);
     }
     
-    // Generate Limbo roll
+    // Generate Limbo roll (multiplier)
     const hash = gameLogic.generateHash(
       seeds.client_seed,
       seeds.nonce,
@@ -48,27 +48,33 @@ async function handleBet(data, emitter) {
     );
     
     const roll = gameLogic.generateLimboRoll(hash);
-    const won = gameLogic.isWin(roll, betValue.target, betValue.mode);
-    const winChance = gameLogic.calculateWinChance(betValue.target, betValue.mode);
-    const multiplier = won ? gameLogic.calculateWinAmount(1, betValue.target, betValue.mode) : 0;
-    const profit = won ? parseFloat(data.betAmount) * multiplier - parseFloat(data.betAmount) : -parseFloat(data.betAmount);
+    const target = parseFloat(betValue.target);
+    const won = gameLogic.isWin(roll, target, betValue.mode);
+    const winChance = gameLogic.calculateWinChance(target, betValue.mode);
+    
+    // Calculate payout multiplier
+    const payoutMultiplier = won ? target : 0;
+    
+    // Calculate profit
+    const betAmount = parseFloat(data.betAmount);
+    const profit = won ? betAmount * payoutMultiplier - betAmount : -betAmount;
     
     // Create game record
     const [game] = await LimboHistory.create([
       {
-        user_id:userId,
+        user_id: userId,
         seed_id: seeds.seed_id,
-        bet_amount: parseFloat(data.betAmount),
+        bet_amount: betAmount,
         token: data.currencyName,
         token_img: data.currencyImage,
         roll: roll,
-        target: betValue.target,
+        target: target,
         mode: betValue.mode,
-        multiplier: multiplier,
+        multiplier: payoutMultiplier,
         won: won,
         profit: profit,
         nonce: seeds.nonce,
-        time: new Date() // Ensure time is set
+        time: new Date()
       },
     ]);
     
@@ -77,7 +83,7 @@ async function handleBet(data, emitter) {
       {
         ...data,
         token: data.currencyName,
-        betAmount: parseFloat(data.betAmount),
+        betAmount: betAmount,
         won: won,
         profit: profit,
       },
@@ -102,10 +108,10 @@ async function handleBet(data, emitter) {
       currencyImage: data.currencyImage,
       betAmount: data.betAmount,
       roll: roll,
-      target: betValue.target,
+      target: target,
       mode: betValue.mode,
-      multiplier: multiplier,
-      winAmount: won ? parseFloat(data.betAmount) * multiplier : 0,
+      multiplier: payoutMultiplier,
+      winAmount: won ? betAmount * payoutMultiplier : 0,
       won: won,
       balance,
       betTime: game.time,
