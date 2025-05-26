@@ -206,8 +206,54 @@ const getUserStatistics = async (req, res) => {
   }
 };
 
+// Utility to generate a unique email and affiliate code for each bot
+function generateBotEmail(name) {
+  // Ensure uniqueness by adding a random number
+  const rand = Math.floor(Math.random() * 100000);
+  return `${name.toLowerCase().replace(/\s/g, '')}${rand}@azabets-bot.com`;
+}
+function generateAffiliateCode(name) {
+  // Ensure uniqueness by adding a random number
+  const rand = Math.floor(Math.random() * 100000);
+  return `BOT${name.toUpperCase().replace(/\s/g, '')}${rand}`;
+}
+
+async function ensureBotUsers(botNames) {
+  const bots = [];
+  for (const name of botNames) {
+    let bot = await User.findOne({ username: name });
+    if (!bot) {
+      // Generate unique email and affiliate code
+      let email, affiliateCode, emailExists, codeExists;
+      do {
+        email = generateBotEmail(name);
+        emailExists = await User.findOne({ email });
+      } while (emailExists);
+
+      do {
+        affiliateCode = generateAffiliateCode(name);
+        codeExists = await User.findOne({ affiliateCode });
+      } while (codeExists);
+
+      bot = await User.create({
+        username: name,
+        email,
+        password: 'botpassword', // You may want to hash or randomize this
+        isBot: true,
+        balance: 10000, // Give bots some balance
+        vipLevel: 0,
+        affiliateCode,
+        agreeToTerms: true,
+        is_verified: true
+      });
+    }
+    bots.push(bot);
+  }
+  return bots;
+}
 
 module.exports = { 
   updateUserDetails,
-  getUserStatistics
+  getUserStatistics,
+  ensureBotUsers
 };

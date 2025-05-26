@@ -7,6 +7,8 @@ const CrashGameHash = require("../../../models/games/crash/crashgamehash");
 const Bills = require("../../../models/bill");
 const CryptoJS = require("crypto-js");
 const { calculateCrashPoint, calculateElapsed, calculateRate, waitFor } = require('./utils');
+// const { faker } = require('@faker-js/faker');
+const { ensureBotUsers } = require('../../../controllers/user.controller');
 
 const GameStatus = {
   0: "CONNECTION",
@@ -49,8 +51,44 @@ class CrashGame {
 
 class CrashGameEngine {
   constructor(io) {
-    this.game = new CrashGame();
     this.io = io;
+    this.game = new CrashGame();
+
+    // Bot config
+    this.botNames = [
+      'Emily', 'James', 'Sophia', 'Liam', 'Olivia', 'Noah', 'Ava', 'Mason', 'Isabella', 'Lucas',
+      'Mia', 'Ethan', 'Charlotte', 'Logan', 'Amelia', 'Benjamin', 'Harper', 'Jacob', 'Ella', 'Michael',
+      'Scarlett', 'Alexander', 'Grace', 'Daniel', 'Chloe', 'Jack', 'Emma', 'Henry', 'Zoe', 'Samuel',
+      'Layla', 'David', 'Matthew', 'Sofia', 'Jackson', 'Victoria', 'Sebastian', 'Penelope', 'Carter',
+      'Riley', 'Wyatt', 'Lily', 'Julian', 'Nora', 'Levi', 'Hazel', 'Isaac', 'Aurora', 'Gabriel'
+    ];
+    this.botUsers = []; // Will hold { _id, username, ... }
+
+    // Ensure bots exist and cache their IDs
+    ensureBotUsers(this.botNames).then(bots => {
+      this.botUsers = bots;
+      // Only start the game after bots are ready!
+      this.run();
+    });
+
+    // --- BOT CONFIGURATION ---
+    this.botAvatars = [
+      // Add avatar URLs or use faker for random ones
+      "https://randomuser.me/api/portraits/women/1.jpg",
+      "https://randomuser.me/api/portraits/men/2.jpg",
+      "https://randomuser.me/api/portraits/women/3.jpg",
+      "https://randomuser.me/api/portraits/men/4.jpg",
+      "https://randomuser.me/api/portraits/women/5.jpg",
+      "https://randomuser.me/api/portraits/men/6.jpg",
+      // ...repeat or randomize as needed
+    ];
+    this.botCurrency = [
+      { name: "USDT", image: "/assets/tokens/usdt.svg" },
+      { name: "BTC", image: "/assets/tokens/btc.svg" },
+      { name: "ETH", image: "/assets/tokens/eth.svg" },
+      { name: "BNB", image: "/assets/tokens/bnb.svg" }
+    ];
+    // --- END BOT CONFIGURATION ---
 
     io.on("connection", (socket) => {
       socket.on("join", (data, callback) => {
@@ -239,6 +277,51 @@ class CrashGameEngine {
       });
     });
   }
+
+  // --- BOT LOGIC ---
+  startCrashBots() {
+    const placeBotBets = async () => {
+      if (this.game.canBet && this.botUsers.length) {
+        const botCount = Math.floor(Math.random() * 8) + 5;
+        const usedIndexes = new Set();
+        for (let i = 0; i < botCount; i++) {
+          let idx;
+          do {
+            idx = Math.floor(Math.random() * this.botUsers.length);
+          } while (usedIndexes.has(idx));
+          usedIndexes.add(idx);
+
+          const bot = this.botUsers[idx];
+          const avatar = "https://randomuser.me/api/portraits/lego/1.jpg"; // or bot.avatar
+          const currency = { name: "USDT", image: "/assets/tokens/usdt.svg" };
+          const bet = Number((Math.random() * 9.9 + 0.1).toFixed(2));
+          const autoEscapeRate = Number((Math.random() * 8.8 + 1.2).toFixed(2));
+
+          // Only one bet per bot per round
+          if (this.game.bets.findIndex((b) => b.userId === String(bot._id)) === -1) {
+            const newBet = {
+              userId: String(bot._id),
+              name: bot.username,
+              avatar,
+              hidden: false,
+              currencyName: currency.name,
+              currencyImage: currency.image,
+              bet,
+              autoEscapeRate,
+              betTime: new Date(),
+              isSpectator: false,
+              gameId: this.game.gameId
+            };
+            // Use the same logic as a real user bet
+            this.handleBotBet(newBet);
+          }
+        }
+      }
+      setTimeout(placeBotBets, Math.floor(Math.random() * 1000) + 500);
+    };
+    placeBotBets();
+  }
+  // --- END BOT LOGIC ---
 
   async gameLoop() {
     clearTimeout(this.loopTimeout);
@@ -613,6 +696,9 @@ class CrashGameEngine {
           betTime: b.bet_time,
           rate: game.escapes.find((e) => e.user_id === b.user_id)?.rate || 0,
         }));
+      // ADD THIS LINE to restart bot betting for the new round:
+      this.startCrashBots();
+
       if (this.game.status === 1) {
         this.io.to("crash-game").emit("pr", {
           gameId: this.game.gameId,
@@ -636,6 +722,61 @@ class CrashGameEngine {
       }
     } catch (err) {
       console.log("Error in crash game", err);
+    }
+  }
+
+  async handleBotBet(data) {
+    // Mimic the "throw-bet" logic, but without socket/callback
+    if (
+      this.game.canBet &&
+      data.gameId === this.game.gameId &&
+      this.game.bets.findIndex((b) => b.userId === data.userId) === -1
+    ) {
+      const newBet = {
+        ...data,
+        name: data.hidden ? "Hidden" : data.name,
+        betTime: new Date(),
+        isSpectator: data.bet === 0
+      };
+      if (!newBet.isSpectator && newBet.bet > 0) {
+        await UserBalance.findByIdAndUpdate(
+          data.userId,
+          { $inc: { balance: -newBet.bet } }
+        );
+        await Bills.create([{
+          user_id: newBet.userId,
+          transaction_type: "Crash Game Bet",
+          token_img: newBet.currencyImage,
+          token_name: newBet.currencyName,
+          balance: newBet.bet,
+          trx_amount: -newBet.bet,
+          datetime: newBet.betTime,
+          status: false,
+          bill_id: Math.floor(Math.random()*100000000),
+        }]);
+      }
+      await CrashGameModel.findOneAndUpdate(
+        { game_id: this.game.gameId },
+        {
+          $push: {
+            bets: {
+              user_id: newBet.userId,
+              bet_time: newBet.betTime,
+              name: newBet.name,
+              avatar: newBet.avatar,
+              hidden: newBet.hidden,
+              token: newBet.currencyName,
+              token_img: newBet.currencyImage,
+              bet: newBet.bet,
+              auto_escape: newBet.autoEscapeRate,
+              bet_type: 0,
+              is_spectator: newBet.isSpectator
+            },
+          },
+        }
+      );
+      this.game.bets.push(newBet);
+      this.io.to("crash-game").emit("b", newBet);
     }
   }
 }

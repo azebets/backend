@@ -59,7 +59,7 @@ class Chat {
 
     // Emit the active user count to all connected clients
     emitActiveUsers() {
-        this.io.emit('active_users', this.activeUsers.size);
+        this.io.emit('active_users', this.activeUsers.size );
     }
 
     startSmartBot() {
@@ -69,8 +69,12 @@ class Chat {
             'Mia', 'Ethan', 'Charlotte', 'Logan', 'Amelia', 'Benjamin', 'Harper', 'Jacob', 'Ella', 'Michael',
             'Scarlett', 'Alexander', 'Grace', 'Daniel', 'Chloe', 'Jack', 'Emma', 'Henry', 'Zoe', 'Samuel',
             'Layla', 'David', 'Ella', 'Matthew', 'Sofia', 'Jackson', 'Victoria', 'Sebastian', 'Penelope', 'Carter',
-            'Riley', 'Wyatt', 'Lily', 'Julian', 'Nora', 'Levi', 'Hazel', 'Isaac', 'Aurora', 'Gabriel'
+            'Riley', 'Wyatt', 'Lily', 'Julian', 'King makei', 'Nora', 'Levi', 'Hazel', 'Isaac', 'Aurora', 'Gabriel'
         ];
+        // Add all bots to activeUsers set
+        botNames.forEach(bot => this.activeUsers.add(`bot:${bot}`));
+        this.emitActiveUsers();
+
         const emojis = [
             "😀", "😎", "🎉", "🍀", "🔥", "💰", "🥳", "👏", "😅", "🤞", "🤑", "😃", "🙌", "💸", "🎰", "🎲", "😇", "🤩", "😜", "😏"
         ];
@@ -133,6 +137,7 @@ class Chat {
             "Who's your lucky friend? 👫",
             "Who's ready for fun? 😃"
         ];
+
 
         // Recursive function to send messages at random intervals
         const sendBotActivity = async () => {
