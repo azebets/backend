@@ -54,7 +54,6 @@ const updateWalletBalance = async (data) => {
     } else {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid operation');
     }
-    console.log(newBalance)
     // Update wallet balance
 
        await USDTWALLET.findByIdAndUpdate(
@@ -77,8 +76,7 @@ const updateWalletBalance = async (data) => {
       datetime: new Date(),
       status: true
     };
-
-    console.log("bills", billData)
+    console.log(billData)
     
     await Bills.create([billData], { session });
     
