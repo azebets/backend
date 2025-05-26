@@ -586,12 +586,12 @@ const handleWebhook = catchAsync(async (req, res) => {
 
         // Process webhook based on type
         const type = payload.type;
-
+        console.log(type)
         if (type === 'DirectDeposit') {                                                                                                                                                             
             // This is a direct deposit webhook
             // We handle both normal deposits and risky deposits (isFlaggedAsRisky) here
             const { recordId, referenceId, coinSymbol, status, isFlaggedAsRisky } = payload.msg;
-
+            console.log(recordId)
 
             // Get the deposit details from CCPayment to verify
             const depositDetails = await ccpaymentService.getDepositRecord({ recordId });
@@ -639,6 +639,11 @@ const handleWebhook = catchAsync(async (req, res) => {
                                 // Only update wallet balance if not flagged as risky
                                 if (!isFlaggedAsRisky) {
                                     const walletCurrency = coinSymbol === 'USDT' ? 'USDT' : coinSymbol;
+                                    console.log({  userId: permanentAddress.user_id,
+                                        currency: walletCurrency,
+                                        amount: parseFloat(depositData.amount),
+                                        operation: 'add',
+                                        transactionType: 'Permanent Deposit'})
                                     await walletUpdateService.updateWalletBalance({
                                         userId: permanentAddress.user_id,
                                         currency: walletCurrency,

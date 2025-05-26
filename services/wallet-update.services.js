@@ -33,7 +33,11 @@ const updateWalletBalance = async (data) => {
     tokenName = currency;
     let convertCurrency = currency === "TETH"  ? "ETH" : currency;
     convertAmount = await convertToUSDT(convertCurrency, amount);
-    
+    console.log(convertAmount)
+    if (convertAmount === null) {
+      console.log('Invalid currency conversion')
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid currency conversion');
+    }
     if (!wallet) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Wallet not found');
     }
@@ -50,7 +54,7 @@ const updateWalletBalance = async (data) => {
     } else {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid operation');
     }
-    
+    console.log(newBalance)
     // Update wallet balance
 
        await USDTWALLET.findByIdAndUpdate(
@@ -73,6 +77,8 @@ const updateWalletBalance = async (data) => {
       datetime: new Date(),
       status: true
     };
+
+    console.log("bills", billData)
     
     await Bills.create([billData], { session });
     
@@ -81,7 +87,7 @@ const updateWalletBalance = async (data) => {
     session.endSession();
     
 
-   return 
+   return "Wallet updated successfully";
 
   } catch (error) {
     // Abort the transaction on error
