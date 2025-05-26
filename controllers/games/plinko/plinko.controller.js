@@ -4,8 +4,7 @@ const mongoose = require('mongoose');
 const PlinkoGame = require('../../../models/games/plinko/plinko_gameV2');
 const PlinkoHistory = require('../../../models/games/plinko/plinko_game_history');
 const PlinkoEncrypt = require('../../../models/games/plinko/plinko_encryped_seeds');
-const User = require('../../../models/user.model');
-
+const Profile = require('../../../models/user.model');
 const { generateRandomString } = require('../../../utils/generators');
 // const { handleWagerIncrease } = require('../profile_mangement/index');
 
@@ -23,14 +22,13 @@ function calculateProbabilities(startRow, endRow) {
     }
     return triangle;
   })(++endRow);
-  for (let row = startRow; row < endRow; row++) {
-    let total = pascalTriangle[row].reduce((sum, num) => sum + num, 0);
-    probabilities[row] = [];
-    pascalTriangle[row].forEach((num) => probabilities[row].push(num / total));
+  for (let rows = startRow; rows < endRow; rows++) {
+    let total = pascalTriangle[rows].reduce((sum, num) => sum + num, 0);
+    probabilities[rows] = [];
+    pascalTriangle[rows].forEach((num) => probabilities[rows].push(num / total));
   }
   return probabilities;
 }
-
 const PAYOUTS = {
   1: {
     8: [5.6, 2.1, 1.1, 1, 0.5, 1, 1.1, 2.1, 5.6],
@@ -71,25 +69,24 @@ const handleUpdatewallet = async (data, emitter) => {
   let balance = 0,
     prev_bal = 0;
   let bet_amount = parseFloat(data.betAmount);
-    let sjj = await User.findById(data.userId);
-    prev_bal = parseFloat(sjj.balance);
-
+    let getBalance = await Profile.findById(data._id);
+    prev_bal = parseFloat(getBalance.balance);
     if (!data.won && prev_bal < bet_amount) {
       throw new Error('Not enough balance!');
     }
 
     balance = prev_bal + (data.won ? parseFloat(data.profit) : -bet_amount);
     emitter('plinko-wallet', [{ ...data, balance }]);
-    await User.findByIdAndUpdate(
-      { user_id: data.userId },
+    await Profile.findByIdAndUpdate(
+       data._id,
       { balance }
     );
   return balance;
 };
 
 function getPayout(betValue, path) {
-  const { risk, row } = betValue;
-  const payouts = PAYOUTS[risk][row];
+  const { risk, rows } = betValue;
+  const payouts = PAYOUTS[risk][rows];
   return payouts[path.map(p => Math.round(p)).reduce((t, e) => t + e, 0)];
 }
 
@@ -117,11 +114,11 @@ function generatePlinkoBallPath(clientSeed, nonce, serverSeed) {
 }
 
 const handleBet = async (data, emitter) => {
-  const { userId: user_id, betValue } = data;
+  const {  _id, betValue } = data;
   try {
-    let seeds = await PlinkoEncrypt.findOne({ is_open: false, user_id })
+    let seeds = await PlinkoEncrypt.findOne({ is_open: false, user_id: _id })
       .sort({ _id: -1 });
-    if (!seeds) {
+    if (!seeds) { 
       const serverSeed = crypto.randomBytes(32).toString('hex');
       const hash_seed = crypto
         .createHash('sha256')
@@ -134,10 +131,11 @@ const handleBet = async (data, emitter) => {
         .digest('hex');
       [seeds] = await PlinkoEncrypt.create(
         [
+
           {
             server_seed: serverSeed,
             hash_seed,
-            user_id: user_id,
+            user_id: _id,
             client_seed: generateRandomString(10),
             next_hash_seed: n_hash_seed,
             next_server_seed: n_serverSeed,
@@ -150,21 +148,20 @@ const handleBet = async (data, emitter) => {
       seeds.client_seed,
       seeds.nonce,
       seeds.server_seed
-    ).slice(0, betValue.row);
+    ).slice(0, betValue.rows);
     const odds = getPayout(betValue, path);
-
     const [game] = await PlinkoGame.create(
       [
         {
-          user_id,
+          user_id: _id,
           seed_id: seeds.seed_id,
           bet_amount: parseFloat(data.betAmount),
           token: data.currencyName,
           token_img: data.currencyImage,
           payout: odds,
           risk: betValue.risk,
-          rows: betValue.row,
-          chance: calculateProbabilities(8, 16)[betValue.row][PAYOUTS[betValue.risk][betValue.row].indexOf(odds)],
+          rows: betValue.rows,
+          chance: calculateProbabilities(8, 16)[betValue.rows][PAYOUTS[betValue.risk][betValue.rows].indexOf(odds)],
           won: odds >= 1,
           profit: odds >= 1 ? parseFloat(data.betAmount) * odds : 0,
           path,
@@ -172,7 +169,8 @@ const handleBet = async (data, emitter) => {
         },
       ],
     );
-    
+
+  
     const balance = await handleUpdatewallet(
       {
         ...data,
@@ -221,7 +219,7 @@ const handleBet = async (data, emitter) => {
             bet_amount: parseFloat(data.betAmount),
             token: data.currencyName,
             token_img: data.currencyImage,
-            user_id: data.userId,
+            user_id: data._id,
             payout: odds,
             won: odds >= 1,
           },
@@ -230,7 +228,7 @@ const handleBet = async (data, emitter) => {
     ]);
     return {
       betId: game.bet_id,
-      userId: user_id,
+      userId: _id,
       name: data.name,
       hidden: data.hidden,
       avatar: data.avatar,
@@ -244,7 +242,7 @@ const handleBet = async (data, emitter) => {
       gameValue: {
         path: path.map(p => Math.round(p)).join(''),
         risk: betValue.risk,
-        row: betValue.row,
+        row: betValue.rows,
       },
     };
   } catch (e) {
@@ -254,15 +252,14 @@ const handleBet = async (data, emitter) => {
 };
 
 async function populateUser(data) {
-  const user = await User.findById(data.user_id);
-  data = {
+  const user = await Profile.findById(data.user_id).lean();
+  return {
     ...data,
-    userId: user.user_id,
+    userId: user._id,
     hidden: user.hidden_from_public,
     name: user.hidden_from_public ? '' : user.username,
     avatar: user.hidden_from_public ? '' : user.profile_image,
   };
-  return data;
 }
 
 const getRecentBets = async (data = {}) => {
@@ -347,9 +344,9 @@ const gameDetail = async (req, res) => {
 };
 
 const gameSeeds = async (req, res) => {
-  const { user_id } = req.user._id;
+  const { user_id } = req.id;
   try {
-    const seeds = await PlinkoEncrypt.findById(user_id,{ is_open: false }).sort(
+    const seeds = await PlinkoEncrypt.findOne({ is_open: false, user_id }).sort(
       {
         _id: -1,
       }
@@ -460,7 +457,7 @@ class PlinkoGameSocket {
         }
       });
       socket.on('plinko-bet', async (data, callback) => {
-        if (!data.userId) {
+        if (!data._id) {
           callback({ code: -1, message: 'UserId Not found' });
           return;
         }
@@ -468,10 +465,10 @@ class PlinkoGameSocket {
           const bet = await handleBet(data, (event, payload) => {
             this.io.to('plinko-game').emit(event, payload);
           });
-          // console.log('On bet complete => ', bet);
           this.io.to('plinko-game').emit('plinkoBet', bet);
           callback({ code: 0, data: bet });
         } catch (error) {
+          console.log(error)
           callback({ code: -1, message: error.message });
         }
       });
