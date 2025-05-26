@@ -1,14 +1,36 @@
-const mongoose = require("mongoose");
 const UserBalance = require("../../../models/user.model");
 const CrashBet = require("../../../models/games/crash/crashbet");
 const CrashGameModel = require("../../../models/games/crash/crashgameV2");
 const CrashGameLock = require("../../../models/games/crash/crash_endgame_lock");
 const CrashGameHash = require("../../../models/games/crash/crashgamehash");
 const Bills = require("../../../models/bill");
-const CryptoJS = require("crypto-js");
+
+const { ensureFiftyBots } = require('../../../controllers/user.controller');
 const { calculateCrashPoint, calculateElapsed, calculateRate, waitFor } = require('./utils');
-// const { faker } = require('@faker-js/faker');
-const { ensureBotUsers } = require('../../../controllers/user.controller');
+
+const botNames = [
+  'Emily', 'James', 'Sophia', 'Liam', 'Olivia', 'Noah', 'Ava', 'Mason', 'Isabella', 'Lucas',
+  'Mia', 'Ethan', 'Charlotte', 'Logan', 'Amelia', 'Benjamin', 'Harper', 'Jacob', 'Ella', 'Michael',
+  'Scarlett', 'Alexander', 'Grace', 'Daniel', 'Chloe', 'Jack', 'Emma', 'Henry', 'Zoe', 'Samuel',
+  'Layla', 'David', 'Matthew', 'Sofia', 'Jackson', 'Victoria', 'Sebastian', 'Penelope', 'Carter',
+  'Riley', 'Wyatt', 'Lily', 'Julian', 'Nora', 'Levi', 'Hazel', 'Isaac', 'Aurora', 'Gabriel'
+];
+const botAvatars = [
+  // Add avatar URLs or use faker for random ones
+  "https://randomuser.me/api/portraits/women/1.jpg",
+  "https://randomuser.me/api/portraits/men/2.jpg",
+  "https://randomuser.me/api/portraits/women/3.jpg",
+  "https://randomuser.me/api/portraits/men/4.jpg",
+  "https://randomuser.me/api/portraits/women/5.jpg",
+  "https://randomuser.me/api/portraits/men/6.jpg",
+  // ...repeat or randomize as needed
+];
+const botCurrency = [
+  { name: "USDT", image: "/assets/tokens/usdt.svg" },
+  { name: "BTC", image: "/assets/tokens/btc.svg" },
+  { name: "ETH", image: "/assets/tokens/eth.svg" },
+  { name: "BNB", image: "/assets/tokens/bnb.svg" }
+];
 
 const GameStatus = {
   0: "CONNECTION",
@@ -53,27 +75,10 @@ class CrashGameEngine {
   constructor(io) {
     this.io = io;
     this.game = new CrashGame();
-
-    // Bot config
-    this.botNames = [
-      'Emily', 'James', 'Sophia', 'Liam', 'Olivia', 'Noah', 'Ava', 'Mason', 'Isabella', 'Lucas',
-      'Mia', 'Ethan', 'Charlotte', 'Logan', 'Amelia', 'Benjamin', 'Harper', 'Jacob', 'Ella', 'Michael',
-      'Scarlett', 'Alexander', 'Grace', 'Daniel', 'Chloe', 'Jack', 'Emma', 'Henry', 'Zoe', 'Samuel',
-      'Layla', 'David', 'Matthew', 'Sofia', 'Jackson', 'Victoria', 'Sebastian', 'Penelope', 'Carter',
-      'Riley', 'Wyatt', 'Lily', 'Julian', 'Nora', 'Levi', 'Hazel', 'Isaac', 'Aurora', 'Gabriel'
-    ];
-    this.botUsers = []; // Will hold { _id, username, ... }
-
-    // Ensure bots exist and cache their IDs
-    ensureBotUsers(this.botNames).then(bots => {
-      this.botUsers = bots;
-      // Only start the game after bots are ready!
-      this.run();
-    });
-
-    // --- BOT CONFIGURATION ---
+    this.botUsers = []; // <-- Add this line
+    this.betBuffer = [];         // <-- Add this line
+    this.betEmitTimeout = null; 
     this.botAvatars = [
-      // Add avatar URLs or use faker for random ones
       "https://randomuser.me/api/portraits/women/1.jpg",
       "https://randomuser.me/api/portraits/men/2.jpg",
       "https://randomuser.me/api/portraits/women/3.jpg",
@@ -88,7 +93,11 @@ class CrashGameEngine {
       { name: "ETH", image: "/assets/tokens/eth.svg" },
       { name: "BNB", image: "/assets/tokens/bnb.svg" }
     ];
-    // --- END BOT CONFIGURATION ---
+    // Ensure exactly 50 bots on startup
+    ensureFiftyBots(botNames, botAvatars).then(bots => {
+      this.botUsers = bots;
+     
+    });
 
     io.on("connection", (socket) => {
       socket.on("join", (data, callback) => {
@@ -192,7 +201,14 @@ class CrashGameEngine {
             this.game.bets.push(newBet);
             
             // Use this.io consistently throughout the code
-            this.io.to("crash-game").emit("b", newBet);
+            this.betBuffer.push(newBet);
+            if (!this.betEmitTimeout) {
+              this.betEmitTimeout = setTimeout(() => {
+                this.io.to("crash-game").emit("b-batch", this.betBuffer);
+                this.betBuffer = [];
+                this.betEmitTimeout = null;
+              }, 200); // Adjust interval as needed
+            }
             
             callback({ code: 0 });
           } else {
@@ -280,46 +296,37 @@ class CrashGameEngine {
 
   // --- BOT LOGIC ---
   startCrashBots() {
-    const placeBotBets = async () => {
-      if (this.game.canBet && this.botUsers.length) {
-        const botCount = Math.floor(Math.random() * 8) + 5;
-        const usedIndexes = new Set();
-        for (let i = 0; i < botCount; i++) {
-          let idx;
-          do {
-            idx = Math.floor(Math.random() * this.botUsers.length);
-          } while (usedIndexes.has(idx));
-          usedIndexes.add(idx);
-
-          const bot = this.botUsers[idx];
-          const avatar = "https://randomuser.me/api/portraits/lego/1.jpg"; // or bot.avatar
-          const currency = { name: "USDT", image: "/assets/tokens/usdt.svg" };
+    if (!Array.isArray(this.botUsers) || !this.botUsers.length) return;
+    if (this.game.canBet) {
+      // Shuffle and pick a random number of bots (e.g., 10-30)
+      const shuffledBots = this.botUsers.sort(() => Math.random() - 0.5);
+      const botCount = Math.floor(Math.random() * 21) + 10; // 10-30 bots
+      for (let i = 0; i < botCount; i++) {
+        const bot = shuffledBots[i];
+        if (this.game.bets.findIndex((b) => b.userId === String(bot._id)) === -1) {
+          // ...create and place bet for this bot...
+          const avatar = this.botAvatars[Math.floor(Math.random() * this.botAvatars.length)];
+          const currency = this.botCurrency[Math.floor(Math.random() * this.botCurrency.length)];
           const bet = Number((Math.random() * 9.9 + 0.1).toFixed(2));
           const autoEscapeRate = Number((Math.random() * 8.8 + 1.2).toFixed(2));
 
-          // Only one bet per bot per round
-          if (this.game.bets.findIndex((b) => b.userId === String(bot._id)) === -1) {
-            const newBet = {
-              userId: String(bot._id),
-              name: bot.username,
-              avatar,
-              hidden: false,
-              currencyName: currency.name,
-              currencyImage: currency.image,
-              bet,
-              autoEscapeRate,
-              betTime: new Date(),
-              isSpectator: false,
-              gameId: this.game.gameId
-            };
-            // Use the same logic as a real user bet
-            this.handleBotBet(newBet);
-          }
+          const newBet = {
+            userId: String(bot._id),
+            name: bot.username,
+            avatar,
+            hidden: false,
+            currencyName: currency.name,
+            currencyImage: currency.image,
+            bet,
+            autoEscapeRate,
+            betTime: new Date(),
+            isSpectator: false,
+            gameId: this.game.gameId
+          };
+          this.handleBotBet(newBet);
         }
       }
-      setTimeout(placeBotBets, Math.floor(Math.random() * 1000) + 500);
-    };
-    placeBotBets();
+    }
   }
   // --- END BOT LOGIC ---
 
@@ -331,10 +338,10 @@ class CrashGameEngine {
       rate = this.game.crash_point;
       //crashed
       try {
-         await CrashGameModel.updateOne(
-           { game_id: this.game.gameId },
-           { status: 3 }
-         );
+        await CrashGameModel.updateOne(
+          { game_id: this.game.gameId },
+          { status: 3 }
+        );
         const crashedAt = Date.now();
         this.game.status = 3;
         this.io.to("crash-game").emit("ed", {
@@ -403,6 +410,12 @@ class CrashGameEngine {
             rate: e.x === -200 ? 1.96 : e.x === 200 ? 2 : 10,
           })),
         });
+
+        // --- CLEAR BOT BETS LIST AFTER CRASH ---
+        this.game.bets = [];
+        this.game.xBets = [];
+        this.game.escapes = [];
+        // ----------------------------------------
 
         const timeDiff = Date.now() - crashedAt;
         if (timeDiff < NEXT_GAME_DELAY)
@@ -651,52 +664,15 @@ class CrashGameEngine {
       this.game.crash_point = game.crash_point;
       this.game.hash = game.hash;
       this.game.startTime = game.start.getTime();
-      this.game.bets = game.bets
-        .filter((b) => b.bet_type === 0)
-        .map((b) => ({
-          userId: b.user_id,
-          name: b.name,
-          avatar: b.avatar,
-          hidden: b.hidden,
-          currencyName: b.token,
-          currencyImage: b.token_img,
-          bet: b.bet,
-          escaped: !!game.escapes.find((e) => e.user_id === b.user_id),
-          betTime: b.bet_time,
-          autoEscapeRate: b.auto_escape,
-        }));
-      
-      this.game.xBets = game.bets
-        .filter((b) => b.bet_type !== 0)
-        .map((b) => ({
-          userId: b.user_id,
-          name: b.name,
-          avatar: b.avatar,
-          hidden: b.hidden,
-          currencyName: b.token,
-          currencyImage: b.token_img,
-          bet: b.bet,
-          betTime: b.bet_time,
-          x: b.bet_type,
-        }));
-      this.game.escapes = game.bets
-        .filter(
-          (b) =>
-            b.bet_type === 0 &&
-            game.escapes.findIndex((e) => e.user_id === b.user_id) !== -1
-        )
-        .map((b) => ({
-          userId: b.user_id,
-          name: b.name,
-          avatar: b.avatar,
-          hidden: b.hidden,
-          currencyName: b.token,
-          currencyImage: b.token_img,
-          bet: b.bet,
-          betTime: b.bet_time,
-          rate: game.escapes.find((e) => e.user_id === b.user_id)?.rate || 0,
-        }));
-      // ADD THIS LINE to restart bot betting for the new round:
+
+      // --- CLEAR BOT BETS LIST FOR NEW ROUND ---
+      this.game.bets = [];
+      this.game.xBets = [];
+      this.game.escapes = [];
+      // -----------------------------------------
+
+      // ...existing code to repopulate bets/xBets/escapes from DB if needed...
+
       this.startCrashBots();
 
       if (this.game.status === 1) {

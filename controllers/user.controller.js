@@ -2,6 +2,7 @@ const User = require('../models/user.model');
 const CrashBet = require('../models/games/crash/crashbet');
 const PlinkoGame = require('../models/games/plinko/plinko_game');
 const HiloGame = require('../models/games/hilo/hilo_game');
+const Bot = require('../models/bot.model');
 const mongoose = require('mongoose');
 
 const updateUserDetails = async (req, res) => {
@@ -219,34 +220,65 @@ function generateAffiliateCode(name) {
 }
 
 async function ensureBotUsers(botNames) {
-  const bots = [];
+  // Check how many bots already exist
+  const existingBots = await Bot.find({ username: { $in: botNames } });
+  if (existingBots.length >= 100) {1
+    // If 50 or more bots exist, return the first 50
+    return existingBots.slice(0,  100);
+  }
+
+  const bots = [...existingBots];
   for (const name of botNames) {
-    let bot = await User.findOne({ username: name });
-    if (!bot) {
-      // Generate unique email and affiliate code
-      let email, affiliateCode, emailExists, codeExists;
-      do {
-        email = generateBotEmail(name);
-        emailExists = await User.findOne({ email });
-      } while (emailExists);
+    if (bots.find(b => b.username === name)) continue; // Skip if already exists
 
-      do {
-        affiliateCode = generateAffiliateCode(name);
-        codeExists = await User.findOne({ affiliateCode });
-      } while (codeExists);
+    // Generate unique email and affiliate code
+    let email, affiliateCode, emailExists, codeExists;
+    do {
+      email = generateBotEmail(name);
+      emailExists = await User.findOne({ email });
+    } while (emailExists);
 
-      bot = await User.create({
-        username: name,
-        email,
-        password: 'botpassword', // You may want to hash or randomize this
-        isBot: true,
-        balance: 10000, // Give bots some balance
-        vipLevel: 0,
-        affiliateCode,
-        agreeToTerms: true,
-        is_verified: true
-      });
-    }
+    do {
+      affiliateCode = generateAffiliateCode(name);
+      codeExists = await Bot.findOne({ affiliateCode });
+    } while (codeExists);
+
+    const bot = await Bot.create({
+      username: name,
+      email,
+      password: 'botpassword',
+      isBot: true,
+      balance: 10000,
+      vipLevel: 0,
+      affiliateCode,
+      agreeToTerms: true,
+      is_verified: true
+    });
+    bots.push(bot);
+
+    if (bots.length >= 100) break; // Stop if we reach 50 bots
+  }
+  return bots.slice(0, 100);
+}
+
+async function ensureFiftyBots(botNames, avatars) {
+  let bots = await Bot.find({});
+  // Delete extra bots if more than 50
+  if (bots.length > 100) {
+    const toDelete = bots.slice(100);
+    await Bot.deleteMany({ _id: { $in: toDelete.map(b => b._id) } });
+    bots = bots.slice(0,  100);
+  }
+  // Create new bots if less than 50
+  while (bots.length < 100) {
+    const name = botNames[bots.length % botNames.length] + (bots.length + 1);
+    const avatar = avatars[bots.length % avatars.length];
+    const affiliateCode = `BOT${name.toUpperCase()}${Math.floor(Math.random() * 100000)}`;
+    const bot = await Bot.create({
+      username: name,
+      avatar,
+      affiliateCode
+    });
     bots.push(bot);
   }
   return bots;
@@ -255,5 +287,6 @@ async function ensureBotUsers(botNames) {
 module.exports = { 
   updateUserDetails,
   getUserStatistics,
-  ensureBotUsers
+  ensureBotUsers,
+  ensureFiftyBots
 };
