@@ -48,6 +48,7 @@ app.use(function (req, res, next) {
   });
 });
 
+
 mongoose.set('strictQuery', false);
 // const dbUri = "mongodb+srv://briankings457:paDAc4lzZaytTHBk@cluster0.c2bu39z.mongodb.net/azabets?retryWrites=true&w=majority&appName=Cluster0"
 // const dbUri = `mongodb://127.0.0.1:27017/azebets`;

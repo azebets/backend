@@ -176,7 +176,7 @@ const adminController = {
 
             const response = {
                 // Profile Model Data
-                user_id: profile.user_id,
+                user_id: profile._id,
                 username: profile.username,
                 email: profile.email,
                 profileImg: profile.profileImg || 'default-avatar-url',
@@ -188,7 +188,7 @@ const adminController = {
                 emailIsLinked: profile.emailIsLinked,
                 profileIsHidden: profile.profileIsHidden,
                 is_verified: profile.is_verified,
-                status: profile.status,
+                status: profile.status || "active",
                 created_at: profile.createdAt,
 
                 // Public Model Data
