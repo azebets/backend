@@ -1,19 +1,17 @@
 const jwt = require('jsonwebtoken');
-const Profile = require('../model/profile');
-const PublicModel = require('../model/public-chat');
-const DiceGame = require('../model/games/classic-dice/dice_game');
-const CrashGame = require('../model/games/crash/crashbet');
-const CrashGameEl = require('../model/games/crash/crashgame');
-const HiloGame = require('../model/games/hilo/hilo_game');
-const PlinkoGame = require('../model/games/plinko/plinko_gameV2');
-const CCPaymentDeposit = require('../model/ccpayment-deposit');
-const CCPaymentWithdrawal = require('../model/ccpayment-withdrawal');
-const DollarWallet = require('../model/dollar-wallet');
-
+const Profile = require('../models/user.model');
+const PublicModel = require('../models/chat.model');
+const DiceGame = require('../models/games/classic-dice/dice_game');
+const CrashGame = require('../models/games/crash/crashbet');
+const CrashGameEl = require('../models/games/crash/crashgame');
+const HiloGame = require('../models/games/hilo/hilo_game');
+const PlinkoGame = require('../models/games/plinko/plinko_gameV2');
+const CCPaymentDeposit = require('../models/ccpayment-deposit');
+const CCPaymentWithdrawal = require('../models/ccpayment-withdrawal');
 
 const ADMIN_EMAIL = 'admin@azebets.com';
 const ADMIN_PASSWORD = 'Keys2541?';
-const JWT_SECRET = 'InenwiNIWb39Nneol?s.mee39nshoosne(3n)'; // Using the same secret from your auth system
+const JWT_SECRET = 'InenwiNIWb39Nneol?s.(3n)';
 
 const adminController = {
     login: async (req, res) => {
@@ -59,10 +57,11 @@ const adminController = {
             const skip = (page - 1) * limit;
 
             const users = await Profile.find()
-                .sort({ created_at: -1 }) // Newest first
+                .sort({ createdAt: -1 }) // Newest first
                 .skip(skip)
                 .limit(limit)
-                .select('user_id username email current_level is_verified status created_at');
+                .select('user_id username email current_level is_verified status createdAt');
+
 
             const total = await Profile.countDocuments();
 
@@ -140,10 +139,10 @@ const adminController = {
                 wallet
             ] = await Promise.all([
                 // Profile data
-                Profile.findOne({ user_id: userId }),
+                Profile.findById(userId),
                 
                 // Public data (chats)
-                PublicModel.find({ user_id: userId }),
+                PublicModel.find({ userId }),
                 
                 // Games data
                 DiceGame.countDocuments({ user_id: userId }),
@@ -162,7 +161,7 @@ const adminController = {
                     { $group: { _id: null, total: { $sum: '$amount' } } }
                 ]),
                 
-                DollarWallet.findOne({ user_id: userId })
+               Profile.findById(userId)
             ]);
 
             if (!profile) {
@@ -190,7 +189,7 @@ const adminController = {
                 profileIsHidden: profile.profileIsHidden,
                 is_verified: profile.is_verified,
                 status: profile.status,
-                created_at: profile.created_at,
+                created_at: profile.createdAt,
 
                 // Public Model Data
                 total_chats: publicData?.length || 0,

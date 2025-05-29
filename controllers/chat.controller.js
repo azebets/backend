@@ -1,5 +1,5 @@
-const Profile = require('../model/profile');
-const PublicChat = require('../model/public-chat');
+const Profile = require('../models/user.model');
+const PublicChat = require('../models/chat.model');
 
 const chatController = {
   banUser: async (req, res) => {

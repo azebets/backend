@@ -29,6 +29,10 @@ const UserSchema = new mongoose.Schema({
     type: Number, 
     default: 10 
   },
+  current_level:{
+    type: Number, 
+    default: 0
+  },
   
   // Fields for affiliate system
   affiliateCode: { type: String, unique: true }, // Unique affiliate code for this user

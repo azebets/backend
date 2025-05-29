@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = 'InenwiNIWb39Nneol?s.mee39nshoosne(3n)';
+const JWT_SECRET = 'InenwiNIWb39Nneol?s.(3n)';
 
 const adminAuth = (req, res, next) => {
     try {

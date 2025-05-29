@@ -14,7 +14,7 @@ app.use(bodyParser.json({limit: '50mb'}));
 app.use(express.urlencoded({ extended: true , limit: '50mb'}));
 
 app.use(cors({
-  origin: ["https://azebets.com","http://localhost:5173", "https://azebets.netlify.app", "https://azebet-admin.netlify.app" ]
+  origin: ["https://azebets.com","http://localhost:5173","http://localhost:3000", "https://azebets.netlify.app", "https://azebets-admin.netlify.app" ]
 }));
 
 const server = createServer(app);
@@ -50,8 +50,8 @@ app.use(function (req, res, next) {
 
 mongoose.set('strictQuery', false);
 // const dbUri = "mongodb+srv://briankings457:paDAc4lzZaytTHBk@cluster0.c2bu39z.mongodb.net/azabets?retryWrites=true&w=majority&appName=Cluster0"
-// const dbUri = `mongodb://127.0.0.1:27017/azebets`;
-const dbUri = `mongodb+srv://highscoreteh:AoUXugCyZEfpBmMx@cluster0.xmpkpjc.mongodb.net/azebet?retryWrites=true&w=majority`
+const dbUri = `mongodb://127.0.0.1:27017/azebets`;
+// const dbUri = `mongodb+srv://highscoreteh:AoUXugCyZEfpBmMx@cluster0.xmpkpjc.mongodb.net/azebet?retryWrites=true&w=majority`
 
 mongoose.connect(dbUri, { useNewUrlParser: true, useUnifiedTopology: true, serverSelectionTimeoutMS: 5000  })
   .then((result) => console.log('Database connected'))
