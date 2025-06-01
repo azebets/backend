@@ -40,6 +40,7 @@ class HiloGames {
               }
             });
           } else {
+            console.log("No user data, just returning bet logs");
             // No user data, just return bet logs
             callback({
               code: 0,

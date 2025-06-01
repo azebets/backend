@@ -3,7 +3,8 @@ const schema = mongoose.Schema
 
 const Schema = new schema({
     user_id: {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
         required: true,
     },
     bet_id: {
@@ -16,11 +17,11 @@ const Schema = new schema({
     },
     token_img: {
         type: String,
-        required: true,
+     
     },
     token: {
         type: String,
-        required: true,
+     
     },
     won: {
         type: Boolean,

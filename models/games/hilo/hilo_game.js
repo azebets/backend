@@ -48,7 +48,8 @@ const roundSchema = new schema({
 
 const Schema = new schema({
     user_id: {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
         required: true,
     },
     bet_amount: {
@@ -57,11 +58,11 @@ const Schema = new schema({
     },
     token_img: {
         type: String,
-        required: true,
+  
     },
     token: {
         type: String,
-        required: true,
+  
     },
     bet_id: {
         type: String,
