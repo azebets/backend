@@ -171,7 +171,7 @@ function generateHashes(seed, numberOfHashes) {
   });
 }
 
-// generateHashes(input, numberOfTimesToHash)
+generateHashes(input, numberOfTimesToHash)
 
 const verify = async (req, res) => {
   try {

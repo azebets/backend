@@ -48,10 +48,9 @@ app.use(function (req, res, next) {
   });
 });
 
-
 mongoose.set('strictQuery', false);
 // const dbUri = `mongodb://127.0.0.1:27017/azebets`;
-const dbUri = `mongodb+srv://highscoreteh:AoUXugCyZEfpBmMx@cluster0.xmpkpjc.mongodb.net/tet?retryWrites=true&w=majority`
+const dbUri = `mongodb+srv://valiantjoee:L4Gq484PPz5VLRpA@cluster0.k7tpqpw.mongodb.net/azebets?retryWrites=true&w=majority&appName=Cluster0`
 
 mongoose.connect(dbUri, { useNewUrlParser: true, useUnifiedTopology: true, serverSelectionTimeoutMS: 5000  })
   .then((result) => console.log('Database connected'))
